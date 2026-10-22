@@ -22,7 +22,7 @@ Alt+T       Open or close the expanded Turn navigator panel
 
 ## Install
 
-Place the plugin files in one of the directories below, then restart OpenCode. The plugin only needs `tui.tsx` and `turns.ts`. The sparse clone commands below skip the README, screenshots, and other unrelated files, and download only these two source files.
+Place the plugin files in one of the directories below. The plugin only needs `tui.tsx` and `turns.ts`. The sparse clone commands below skip the README, screenshots, and other unrelated files, and download only these two source files. OpenCode usually picks up the plugin without a restart; if it does not appear in the current session, switch sessions and check again.
 
 ### Install globally (available in every project)
 
@@ -30,6 +30,12 @@ Place the plugin files in one of the directories below, then restart OpenCode. T
 | --- | --- |
 | macOS / Linux | `~/.config/opencode/plugins/turn-navigator/` |
 | Windows | `%USERPROFILE%\.config\opencode\plugins\turn-navigator\` |
+
+You can also send this prompt to an OpenCode agent with terminal access:
+
+```text
+Install OpenCode Turn Navigator from https://github.com/Rayle8/opencode-turn-navigator in my global OpenCode plugin directory (macOS / Linux: ~/.config/opencode/plugins/turn-navigator; Windows: %USERPROFILE%\.config\opencode\plugins\turn-navigator). Check out and install only tui.tsx and turns.ts. No restart should be needed; tell me how to confirm that the plugin loaded.
+```
 
 macOS / Linux:
 
@@ -62,7 +68,7 @@ To update a global installation, run `git -C ~/.config/opencode/plugins/turn-nav
 
 OpenCode loads local plugins from the global plugin directory `~/.config/opencode/plugins/` (Windows: `%USERPROFILE%\.config\opencode\plugins\`) and the project directory `<project-root>/.opencode/plugins/`. No `opencode.json` change, dependency installation, or build step is required.
 
-After restarting OpenCode, open a session wide enough to show the sidebar and confirm that the `Turns` section appears. Click a turn to jump, or press `Alt+T` to open the full list.
+After installation, open or switch to a session wide enough to show the sidebar and confirm that the `Turns` section appears. Click a turn to jump, or press `Alt+T` to open the full list. A restart is usually not needed.
 
 ## Where it appears
 

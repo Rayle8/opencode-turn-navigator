@@ -22,7 +22,7 @@ Alt+T       打开或关闭完整轮次面板
 
 ## 安装
 
-将插件文件放入以下任一插件目录，然后重启 OpenCode。插件只需要 `tui.tsx` 和 `turns.ts`；下面的精简克隆命令会跳过 README、截图和其他无关文件，并仅下载这两个源码文件。
+将插件文件放入以下任一插件目录。插件只需要 `tui.tsx` 和 `turns.ts`；下面的精简克隆命令会跳过 README、截图和其他无关文件，并仅下载这两个源码文件。安装完成后通常无需重启 OpenCode；如果当前会话还没有显示插件，切换会话后再检查。
 
 ### 全局安装（所有项目可用）
 
@@ -30,6 +30,12 @@ Alt+T       打开或关闭完整轮次面板
 | --- | --- |
 | macOS / Linux | `~/.config/opencode/plugins/turn-navigator/` |
 | Windows | `%USERPROFILE%\.config\opencode\plugins\turn-navigator\` |
+
+也可以把下面的提示词发给支持终端操作的 OpenCode 助手：
+
+```text
+请从 https://github.com/Rayle8/opencode-turn-navigator 安装 OpenCode Turn Navigator，并放入当前用户的全局 OpenCode 插件目录（macOS / Linux：~/.config/opencode/plugins/turn-navigator；Windows：%USERPROFILE%\.config\opencode\plugins\turn-navigator）。只检出并安装 tui.tsx 和 turns.ts。安装后无需重启 OpenCode；请告诉我如何确认插件已加载。
+```
 
 macOS / Linux：
 
@@ -62,7 +68,7 @@ git -C .opencode/plugins/turn-navigator sparse-checkout set --no-cone /tui.tsx /
 
 OpenCode 会从全局插件目录 `~/.config/opencode/plugins/`（Windows：`%USERPROFILE%\.config\opencode\plugins\`）和项目目录 `<项目根目录>/.opencode/plugins/` 加载本地插件。无需修改 `opencode.json`，也无需额外安装依赖或构建。
 
-重启后打开一个可以显示侧栏的会话，确认出现 `Turns` 区块；点击轮次可跳转，按 `Alt+T` 打开完整列表。
+安装后打开或切换到一个可以显示侧栏的会话，确认出现 `Turns` 区块；点击轮次可跳转，按 `Alt+T` 打开完整列表。通常无需重启 OpenCode。
 
 ## 插件显示位置
 
