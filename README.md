@@ -9,6 +9,16 @@ Alt+T            # toggle the expanded Turn navigator panel
 <leader>b        # host binding: show/hide the sidebar
 ```
 
+## Screenshots
+
+### Plugin installed
+
+![Turn Navigator installed](assets/turn-navigator-installed.png)
+
+### Without the plugin
+
+![Turn Navigator without the plugin](assets/turn-navigator-not-installed.png)
+
 ## Where it appears
 
 - **Sidebar (default).** On terminals wide enough for the sidebar, a `Turns`
