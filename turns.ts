@@ -45,6 +45,8 @@ export type Compaction = {
   readonly cost?: number
   readonly error?: string
   readonly cancelled: boolean
+  /** Signed boundary steps from the last user prompt; undefined when no navigable message exists. */
+  readonly jumpSteps?: number
 }
 
 export type TurnsEntry = Turn | Compaction
@@ -58,6 +60,7 @@ export function collectTimeline(messages: readonly SessionMessageInfo[]): Timeli
   const totalPrompts = messages.filter((message) => message.type === "user" && message.text.trim()).length
   const before = compactionBefore(messages)
   const after = compactionAfter(messages)
+  const jumps = compactionJumps(messages)
   const turns: Turn[] = []
   const entries: TurnsEntry[] = []
   let promptIndex = 0
@@ -105,7 +108,9 @@ export function collectTimeline(messages: readonly SessionMessageInfo[]): Timeli
       continue
     }
     if (message.type === "compaction") {
-      entries.push(collectCompaction(message, before.get(message.id), after.get(message.id)))
+      entries.push(
+        collectCompaction(message, before.get(message.id), after.get(message.id), jumps.get(message.id)),
+      )
     }
   }
 
@@ -165,10 +170,42 @@ function contextTokens(message: Extract<SessionMessageInfo, { type: "assistant" 
   return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
 }
 
+/**
+ * Compaction rows have no host navigation boundary of their own, so jump to the
+ * nearest user/assistant boundary around them. The count is relative to the last
+ * user prompt, which is where the jump starts.
+ */
+function compactionJumps(messages: readonly SessionMessageInfo[]) {
+  const boundaries: Array<{ index: number; user: boolean }> = []
+  for (let index = 0; index < messages.length; index++) {
+    const message = messages[index]!
+    if (message.type === "user" && message.text.trim()) {
+      boundaries.push({ index, user: true })
+      continue
+    }
+    if (message.type === "assistant" && message.content.some((part) => part.type === "text" && part.text.trim())) {
+      boundaries.push({ index, user: false })
+    }
+  }
+  const lastUser = boundaries.findLastIndex((boundary) => boundary.user)
+  if (lastUser === -1) return new Map<string, number>()
+
+  const result = new Map<string, number>()
+  for (let index = 0; index < messages.length; index++) {
+    if (messages[index]!.type !== "compaction") continue
+    const target = boundaries.findLastIndex((boundary) => boundary.index < index)
+    const position = target !== -1 ? target : boundaries.findIndex((boundary) => boundary.index > index)
+    if (position === -1) continue
+    result.set(messages[index]!.id, position - lastUser)
+  }
+  return result
+}
+
 function collectCompaction(
   message: Extract<SessionMessageInfo, { type: "compaction" }>,
   before: number | undefined,
   after: number | undefined,
+  jumpSteps: number | undefined,
 ): Compaction {
   const cancelled =
     message.status === "failed" &&
@@ -213,6 +250,7 @@ function collectCompaction(
     cost,
     error,
     cancelled,
+    jumpSteps,
   }
 }
 
@@ -226,7 +264,10 @@ function compactionPreview(
   if (status === "running") return "compact · running"
   if (status === "failed") return cancelled ? "compact · cancelled" : "compact · failed"
   if (saved !== undefined) {
-    if (saved > 0) return `compact · saved ${formatTokens(saved)}`
+    if (saved > 0) {
+      const percent = before! > 0 ? Math.round((saved / before!) * 100) : 0
+      return `compact · saved ${formatTokens(saved)} (${percent}%)`
+    }
     return `compact · ${formatTokens(before!)}→${formatTokens(after!)}`
   }
   if (before !== undefined) return `compact · ${formatTokens(before)}→…`

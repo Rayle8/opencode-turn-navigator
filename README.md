@@ -23,13 +23,15 @@ Alt+T            # toggle the expanded Turn navigator panel
   long sessions. The row selected last is remembered and scrolled into view.
 
 Compaction messages appear between turns. Their row shows the context saved once
-the next assistant step reports it (for example `compact · saved 82.3k`); a
-running compaction shows `compact · running`, and a failed or cancelled one
+the next assistant step reports it (for example `compact · saved 82.3k (68%)`);
+a running compaction shows `compact · running`, and a failed or cancelled one
 shows that outcome. Hovering a compaction row shows the before/after context,
 the exact saving and percentage, the compaction request's own token usage and
 cost, and the summary or error. Until the next assistant step lands, the row
 shows the previous size and an ellipsis instead of guessing the benefit.
-Compaction rows are informational, not transcript jump targets.
+Clicking a compaction row jumps to the nearest navigable message around it (the
+message just before the compaction when one exists), because the host's message
+navigation does not expose compaction rows themselves.
 
 Both views show the turn number and prompt preview; compaction rows use a `⇣`
 marker instead. Hovering a turn shows the full prompt, and hovering a compaction
@@ -58,6 +60,12 @@ A plain click or Enter stops at the prompt. Ctrl+click in either view also
 dispatches `session.message.next` once per reply message that the host
 navigation stops at, so the last step lands on the turn's final text reply. A
 turn with no text reply stays at its prompt.
+
+A compaction row starts at the same newest-user prompt and then walks
+`session.message.previous` or `session.message.next` to the nearest
+user/assistant boundary. The host's boundary list excludes compaction rows, so
+the click lands on the message immediately around the compaction (usually the
+assistant reply just before it).
 
 No dialog is opened, so there is no popup or flicker. The sidebar never takes
 the session pane's input, so it jumps in place and stays open. The expanded

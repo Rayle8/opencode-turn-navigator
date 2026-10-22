@@ -3,12 +3,13 @@ import type { PanelInput } from "@opencode/plugin/tui/context"
 import type { BoxRenderable, Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { Portal } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { collectTimeline, formatClock, type Turn, type TurnsEntry } from "./turns"
+import { collectTimeline, formatClock, type Compaction, type Turn, type TurnsEntry } from "./turns"
 
 const PLUGIN_ID = "turn-navigator"
 const PANEL_NAME = "turn-navigator.turns"
 const LAST_USER_COMMAND = "session.messages_last_user"
 const PREVIOUS_USER_COMMAND = "session.message.user.previous"
+const PREVIOUS_MESSAGE_COMMAND = "session.message.previous"
 const NEXT_MESSAGE_COMMAND = "session.message.next"
 const JUMP_SETTLE_MS = 120
 
@@ -82,6 +83,56 @@ function createTimelineJump(context: Plugin.Context, options?: { prepare?: () =>
         for (let index = 0; index < turn.replyStops; index++) {
           if (generation !== jumpGeneration) return
           context.keymap.dispatch(NEXT_MESSAGE_COMMAND)
+        }
+      }, JUMP_SETTLE_MS)
+    }
+    setTimeout(start, 0)
+  }
+}
+
+// Compaction rows are not host navigation boundaries, so start at the newest
+// prompt and walk to the nearest user/assistant boundary around the compaction.
+function createCompactionJump(
+  context: Plugin.Context,
+  options?: { prepare?: () => void; restore?: () => void },
+) {
+  const reachable = (id: string) => context.keymap.commands().some((command) => command.id === id)
+  return (entry: Compaction) => {
+    const steps = entry.jumpSteps
+    if (steps === undefined) {
+      context.ui.toast.show({
+        variant: "warning",
+        message: "Cannot locate this compaction in the transcript",
+      })
+      return
+    }
+    // Session commands are only reachable while the session pane owns input.
+    options?.prepare?.()
+    const required = [LAST_USER_COMMAND, PREVIOUS_MESSAGE_COMMAND, NEXT_MESSAGE_COMMAND]
+    const generation = ++jumpGeneration
+    let waits = 0
+    const start = () => {
+      if (generation !== jumpGeneration) return
+      if (!required.every(reachable)) {
+        if (++waits < (options?.prepare ? 50 : 10)) {
+          setTimeout(start, 10)
+          return
+        }
+        options?.restore?.()
+        context.ui.toast.show({
+          variant: "warning",
+          message: "Compaction jumps are unavailable in this view",
+        })
+        return
+      }
+      context.keymap.dispatch(LAST_USER_COMMAND)
+      if (steps === 0) return
+      setTimeout(() => {
+        if (generation !== jumpGeneration) return
+        const command = steps > 0 ? NEXT_MESSAGE_COMMAND : PREVIOUS_MESSAGE_COMMAND
+        for (let index = 0; index < Math.abs(steps); index++) {
+          if (generation !== jumpGeneration) return
+          context.keymap.dispatch(command)
         }
       }, JUMP_SETTLE_MS)
     }
@@ -174,6 +225,10 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     prepare: () => props.panel.close(),
     restore: () => props.context.ui.panel.open(PANEL_NAME),
   })
+  const jumpCompact = createCompactionJump(props.context, {
+    prepare: () => props.panel.close(),
+    restore: () => props.context.ui.panel.open(PANEL_NAME),
+  })
   let scroll: ScrollBoxRenderable | undefined
 
   const messages = createMemo(() => props.context.data.session.message.list(props.panel.sessionID))
@@ -182,15 +237,15 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   const entries = createMemo(() => timeline().entries)
   const running = createMemo(() => props.context.data.session.status(props.panel.sessionID) === "running")
   const chase = createChase(running)
-  const selectedTurn = createMemo(() => turns().find((turn) => turn.id === selected()))
+  const selectedEntry = createMemo(() => entries().find((entry) => entry.id === selected()))
 
   createEffect(() => {
-    const list = turns()
+    const list = entries()
     if (list.length === 0) {
       setSelected(undefined)
       return
     }
-    if (!list.some((turn) => turn.id === selected())) setSelected(list[list.length - 1]!.id)
+    if (!list.some((entry) => entry.id === selected())) setSelected(list[list.length - 1]!.id)
   })
 
   const reveal = (id: string | undefined) => {
@@ -208,24 +263,27 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   })
 
   const move = (delta: number) => {
-    const list = turns()
+    const list = entries()
     if (list.length === 0) return
-    const index = list.findIndex((turn) => turn.id === selected())
+    const index = list.findIndex((entry) => entry.id === selected())
     const next = index === -1 ? 0 : (index + delta + list.length) % list.length
     setSelected(list[next]!.id)
     reveal(list[next]!.id)
   }
 
-  const select = (turn: Turn | undefined) => {
-    if (!turn) return
-    setSelected(turn.id)
-    reveal(turn.id)
+  const select = (entry: TurnsEntry | undefined) => {
+    if (!entry) return
+    setSelected(entry.id)
+    reveal(entry.id)
   }
 
   const open = (entry: TurnsEntry, target: JumpTarget) => {
-    if (entry.kind !== "turn") return
-    setSelected(entry.id)
     setTip(undefined)
+    setSelected(entry.id)
+    if (entry.kind === "compaction") {
+      jumpCompact(entry)
+      return
+    }
     jump(entry, target)
   }
 
@@ -269,26 +327,26 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
       },
       {
         id: "turn-navigator.panel.first",
-        title: "First turn",
+        title: "First entry",
         group: "Turn navigator",
         bind: "g",
-        run: () => select(turns()[0]),
+        run: () => select(entries()[0]),
       },
       {
         id: "turn-navigator.panel.last",
-        title: "Last turn",
+        title: "Last entry",
         group: "Turn navigator",
         bind: "shift+g",
-        run: () => select(turns()[turns().length - 1]),
+        run: () => select(entries()[entries().length - 1]),
       },
       {
         id: "turn-navigator.panel.open",
-        title: "Jump to turn",
+        title: "Jump to entry",
         group: "Turn navigator",
         bind: "return",
         run: () => {
-          const turn = selectedTurn()
-          if (turn) jump(turn)
+          const entry = selectedEntry()
+          if (entry) open(entry, "prompt")
         },
       },
       {
@@ -304,11 +362,11 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   const isRunningTurn = (entry: TurnsEntry) =>
     entry.kind === "turn" && running() && entry.id === turns()[turns().length - 1]?.id
   const rowBackground = (entry: TurnsEntry) => {
-    if (entry.kind === "turn" && entry.id === selected()) return theme.background.raised.high
+    if (entry.id === selected()) return theme.background.raised.high
     if (entry.id === hovered()) return theme.background.raised.max
   }
   const rowColor = (entry: TurnsEntry) => {
-    if (entry.kind === "turn" && entry.id === selected()) return theme.text.base
+    if (entry.id === selected()) return theme.text.base
     if (entry.id === hovered()) return theme.text.base
     return theme.text.muted
   }
@@ -410,7 +468,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
 
       <box flexDirection="column" flexShrink={0} gap={0}>
         <text fg={theme.text.muted} wrapMode="none" truncate>
-          click / enter prompt · ctrl+click last reply
+          click / enter jump · ctrl+click last reply
         </text>
         <text fg={theme.text.faint} wrapMode="none" truncate>
           j k move · g shift+g first/last · alt+t close
@@ -427,6 +485,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   const [hovered, setHovered] = createSignal<string>()
   const [tip, setTip] = createSignal<TooltipState>()
   const jump = createTimelineJump(props.context)
+  const jumpCompact = createCompactionJump(props.context)
 
   const messages = createMemo(() => props.context.data.session.message.list(props.sessionID))
   const timeline = createMemo(() => collectTimeline(messages()))
@@ -555,9 +614,9 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
                 onMouseOver={() => showTip(entry)}
                 onMouseOut={() => hideTip(entry.id)}
                 onMouseUp={(event) => {
-                  if (entry.kind !== "turn") return
                   setTip(undefined)
-                  jump(entry, event.modifiers.ctrl ? "reply" : "prompt")
+                  if (entry.kind === "turn") jump(entry, event.modifiers.ctrl ? "reply" : "prompt")
+                  else jumpCompact(entry)
                 }}
               >
                 <text
