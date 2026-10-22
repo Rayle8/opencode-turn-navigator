@@ -571,12 +571,24 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   )
 }
 
+function SidebarHint(props: { context: Plugin.Context }) {
+  return (
+    <text fg={props.context.theme.text.muted} wrapMode="none" truncate>
+      <b>alt+t</b> expand turns
+    </text>
+  )
+}
+
 export default Plugin.define({
   id: PLUGIN_ID,
   setup(context) {
     context.ui.slot({
       append: "sidebar.content",
       render: (props) => <SidebarTurns context={context} sessionID={props.sessionID} />,
+    })
+    context.ui.slot({
+      append: "sidebar.footer",
+      render: () => <SidebarHint context={context} />,
     })
     context.ui.slot({
       append: "session.panel",
