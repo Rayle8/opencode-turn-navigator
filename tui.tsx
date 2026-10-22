@@ -425,6 +425,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
 
   const messages = createMemo(() => props.context.data.session.message.list(props.sessionID))
   const turns = createMemo(() => collectTurns(messages()))
+  const hasTurns = createMemo(() => turns().length > 0)
   const running = createMemo(() => props.context.data.session.status(props.sessionID) === "running")
   const chase = createChase(running)
   const isRunningTurn = (turn: Turn) => running() && turn.id === turns()[turns().length - 1]?.id
@@ -463,10 +464,16 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
       current = current.parent
     }
     if (current !== scroll.content) return
-    const rows = scroll.viewport.height - top - 1
+    // Reserve one row for the fixed expand hint below the list.
+    const rows = scroll.viewport.height - top - 1 - (hasTurns() ? 1 : 0)
     if (rows >= 1) setListRows(rows)
   }
   const scheduleMeasure = () => setTimeout(measure, 0)
+
+  createEffect(() => {
+    hasTurns()
+    scheduleMeasure()
+  })
 
   onMount(() => {
     scheduleMeasure()
@@ -566,16 +573,13 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
           </For>
         </scrollbox>
       </Show>
+      <Show when={hasTurns()}>
+        <text fg={theme.text.faint} wrapMode="none" truncate>
+          <b>alt+t</b> expand turns
+        </text>
+      </Show>
       <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} />}</Show>
     </box>
-  )
-}
-
-function SidebarHint(props: { context: Plugin.Context }) {
-  return (
-    <text fg={props.context.theme.text.muted} wrapMode="none" truncate>
-      <b>alt+t</b> expand turns
-    </text>
   )
 }
 
@@ -585,10 +589,6 @@ export default Plugin.define({
     context.ui.slot({
       append: "sidebar.content",
       render: (props) => <SidebarTurns context={context} sessionID={props.sessionID} />,
-    })
-    context.ui.slot({
-      append: "sidebar.footer",
-      render: () => <SidebarHint context={context} />,
     })
     context.ui.slot({
       append: "session.panel",

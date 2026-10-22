@@ -15,8 +15,9 @@ Alt+T            # toggle the expanded Turn navigator panel
   section is appended after the existing session title, Context, todo, and MCP
   blocks. It shows every loaded turn in chronological order, so the newest turn
   sits at the bottom. The list fills the remaining sidebar height and gains a
-  vertical scrollbar as soon as its turns exceed the visible rows. The sidebar
-  footer also shows an `alt+t expand turns` hint. Nothing needs to be enabled.
+  vertical scrollbar as soon as its turns exceed the visible rows. A fixed
+  `alt+t expand turns` hint sits below the list, outside the list's scroll area.
+  Nothing needs to be enabled.
 - **Expanded panel.** `Alt+T` opens the complete list (every loaded turn,
   oldest first) in the right pane, which is useful on narrow terminals or for
   long sessions. The row selected last is remembered and scrolled into view.
