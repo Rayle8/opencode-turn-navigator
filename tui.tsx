@@ -1,6 +1,6 @@
 import { Plugin } from "@opencode/plugin/tui"
 import type { PanelInput } from "@opencode/plugin/tui/context"
-import type { BoxRenderable, Renderable, ScrollBoxRenderable } from "@opentui/core"
+import type { BoxRenderable, MouseEvent, Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { Portal } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { collectTimeline, formatClock, type Compaction, type Turn, type TurnsEntry } from "./turns"
@@ -12,6 +12,7 @@ const PREVIOUS_USER_COMMAND = "session.message.user.previous"
 const PREVIOUS_MESSAGE_COMMAND = "session.message.previous"
 const NEXT_MESSAGE_COMMAND = "session.message.next"
 const JUMP_SETTLE_MS = 120
+const TOOLTIP_PIN_MS = 3000
 
 // A single cell; each frame lights one edge in clockwise order so the border
 // appears to flow around it.
@@ -152,7 +153,12 @@ type TooltipState = {
 
 // The row itself never grows: the full prompt is drawn in a root-level overlay
 // so the list geometry, scroll position, and hover target stay fixed.
-function TurnTooltip(props: { context: Plugin.Context; state: TooltipState }) {
+function TurnTooltip(props: {
+  context: Plugin.Context
+  state: TooltipState
+  pinned: boolean
+  onDismiss: () => void
+}) {
   const theme = props.context.theme
   const [wrapper, setWrapper] = createSignal<BoxRenderable>()
   const [height, setHeight] = createSignal(0)
@@ -179,6 +185,21 @@ function TurnTooltip(props: { context: Plugin.Context; state: TooltipState }) {
     node.left = left()
     node.top = top()
   })
+  // While pinned, any mouse-down that reaches the root is outside the tooltip:
+  // the tooltip stops propagation for its own clicks and scrollbar.
+  createEffect(() => {
+    if (!props.pinned) return
+    const root = props.context.renderer.root
+    const previous = root.onMouseDown
+    const handler = (event: MouseEvent) => {
+      previous?.call(root, event)
+      props.onDismiss()
+    }
+    root.onMouseDown = handler
+    onCleanup(() => {
+      if (root.onMouseDown === handler) root.onMouseDown = previous
+    })
+  })
   return (
     <Portal
       ref={(value) => {
@@ -196,15 +217,34 @@ function TurnTooltip(props: { context: Plugin.Context; state: TooltipState }) {
         border
         borderColor={theme.border.base}
         backgroundColor={theme.background.raised.max}
-        paddingLeft={1}
-        paddingRight={1}
+        onMouseDown={(event) => event.stopPropagation()}
         onSizeChange={function (this: BoxRenderable) {
           setHeight(this.height)
         }}
       >
-        <text fg={theme.text.base} wrapMode="word">
-          {props.state.text}
-        </text>
+        <scrollbox
+          width="100%"
+          maxHeight={Math.max(1, props.state.terminalHeight - 4)}
+          flexShrink={1}
+          horizontalScrollbarOptions={{ visible: false }}
+          verticalScrollbarOptions={{
+            position: "absolute",
+            right: 0,
+            top: 0,
+            width: 1,
+            height: "100%",
+            trackOptions: {
+              backgroundColor: theme.background.raised.max,
+              foregroundColor: theme.scrollbar.base,
+            },
+          }}
+        >
+          <box width="100%" paddingLeft={1} paddingRight={1}>
+            <text fg={theme.text.base} wrapMode="word">
+              {props.state.text}
+            </text>
+          </box>
+        </scrollbox>
       </box>
     </Portal>
   )
@@ -215,6 +255,18 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   const [remembered, setRemembered] = props.context.storage.memory<{ id?: string }>("selection", { initial: {} })
   const [hovered, setHovered] = createSignal<string>()
   const [tip, setTip] = createSignal<TooltipState>()
+  const [pinned, setPinned] = createSignal(false)
+  let pinTimer: ReturnType<typeof setTimeout> | undefined
+  const clearPinTimer = () => {
+    if (pinTimer) clearTimeout(pinTimer)
+    pinTimer = undefined
+  }
+  const dismissTip = () => {
+    clearPinTimer()
+    setPinned(false)
+    setHovered(undefined)
+    setTip(undefined)
+  }
   const selected = () => remembered.id
   const setSelected = (id: string | undefined) => {
     setRemembered((draft) => {
@@ -278,7 +330,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   }
 
   const open = (entry: TurnsEntry, target: JumpTarget) => {
-    setTip(undefined)
+    dismissTip()
     setSelected(entry.id)
     if (entry.kind === "compaction") {
       jumpCompact(entry)
@@ -288,10 +340,14 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   }
 
   const showTip = (entry: TurnsEntry) => {
+    const same = tip()?.id === entry.id
     setHovered(entry.id)
     const index = entries().findIndex((item) => item.id === entry.id)
     const row = index === -1 ? undefined : scroll?.getChildren()[index]
-    if (!row || row.isDestroyed) return
+    if (!row || row.isDestroyed) {
+      if (!same) dismissTip()
+      return
+    }
     setTip({
       id: entry.id,
       text: entry.full,
@@ -301,12 +357,32 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
       terminalWidth: props.context.renderer.width,
       terminalHeight: props.context.renderer.height,
     })
+    if (same) {
+      if (pinned() || pinTimer) return
+    } else {
+      setPinned(false)
+      clearPinTimer()
+    }
+    pinTimer = setTimeout(() => {
+      pinTimer = undefined
+      if (tip()?.id === entry.id && hovered() === entry.id) setPinned(true)
+    }, TOOLTIP_PIN_MS)
   }
 
   const hideTip = (id: string) => {
     if (hovered() === id) setHovered(undefined)
-    if (tip()?.id === id) setTip(undefined)
+    if (tip()?.id !== id) return
+    clearPinTimer()
+    if (pinned()) return
+    setTip(undefined)
   }
+
+  createEffect(() => {
+    const current = tip()
+    if (!current) return
+    if (!entries().some((entry) => entry.id === current.id)) dismissTip()
+  })
+  onCleanup(clearPinTimer)
 
   props.context.keymap.layer(() => ({
     priority: 20,
@@ -475,15 +551,34 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
         </text>
       </box>
 
-      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} />}</Show>
+      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} pinned={pinned()} onDismiss={dismissTip} />}</Show>
     </box>
   )
 }
 
 function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   const theme = props.context.theme
+  const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
   const [hovered, setHovered] = createSignal<string>()
   const [tip, setTip] = createSignal<TooltipState>()
+  const [pinned, setPinned] = createSignal(false)
+  let pinTimer: ReturnType<typeof setTimeout> | undefined
+  const clearPinTimer = () => {
+    if (pinTimer) clearTimeout(pinTimer)
+    pinTimer = undefined
+  }
+  const dismissTip = () => {
+    clearPinTimer()
+    setPinned(false)
+    setHovered(undefined)
+    setTip(undefined)
+  }
+  const toggle = () => {
+    dismissTip()
+    void updateView((draft) => {
+      draft.open = !draft.open
+    }).catch((error) => console.error("Failed to persist Turns sidebar state", error))
+  }
   const jump = createTimelineJump(props.context)
   const jumpCompact = createCompactionJump(props.context)
 
@@ -552,10 +647,14 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   })
 
   const showTip = (entry: TurnsEntry) => {
+    const same = tip()?.id === entry.id
     setHovered(entry.id)
     const index = entries().findIndex((item) => item.id === entry.id)
     const row = index === -1 ? undefined : list?.getChildren()[index]
-    if (!row || row.isDestroyed) return
+    if (!row || row.isDestroyed) {
+      if (!same) dismissTip()
+      return
+    }
     setTip({
       id: entry.id,
       text: entry.full,
@@ -565,20 +664,53 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
       terminalWidth: props.context.renderer.width,
       terminalHeight: props.context.renderer.height,
     })
+    if (same) {
+      if (pinned() || pinTimer) return
+    } else {
+      setPinned(false)
+      clearPinTimer()
+    }
+    pinTimer = setTimeout(() => {
+      pinTimer = undefined
+      if (tip()?.id === entry.id && hovered() === entry.id) setPinned(true)
+    }, TOOLTIP_PIN_MS)
   }
 
   const hideTip = (id: string) => {
     if (hovered() === id) setHovered(undefined)
-    if (tip()?.id === id) setTip(undefined)
+    if (tip()?.id !== id) return
+    clearPinTimer()
+    if (pinned()) return
+    setTip(undefined)
   }
+
+  createEffect(() => {
+    const current = tip()
+    if (!current) return
+    if (!entries().some((entry) => entry.id === current.id)) dismissTip()
+  })
+  onCleanup(clearPinTimer)
 
   return (
     <box ref={(value: BoxRenderable) => (root = value)}>
-      <text fg={theme.text.base} wrapMode="none">
-        <b>Turns ({turns().length})</b>
-      </text>
-      <Show
-        when={entries().length > 0}
+      <box flexDirection="row" justifyContent="space-between" gap={1} onMouseDown={toggle}>
+        <box flexDirection="row" gap={1} minWidth={0}>
+          <text fg={theme.text.base} wrapMode="none">
+            {view.open ? "▼" : "▶"}
+          </text>
+          <text fg={theme.text.base} wrapMode="none">
+            <b>Turns ({turns().length})</b>
+          </text>
+        </box>
+        <Show when={running()}>
+          <text fg={theme.text.feedback.success.base} wrapMode="none">
+            ●
+          </text>
+        </Show>
+      </box>
+      <Show when={view.open}>
+        <Show
+          when={entries().length > 0}
         fallback={
           <text fg={theme.text.muted} wrapMode="word">
             No user turns yet
@@ -614,7 +746,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
                 onMouseOver={() => showTip(entry)}
                 onMouseOut={() => hideTip(entry.id)}
                 onMouseUp={(event) => {
-                  setTip(undefined)
+                  dismissTip()
                   if (entry.kind === "turn") jump(entry, event.modifiers.ctrl ? "reply" : "prompt")
                   else jumpCompact(entry)
                 }}
@@ -650,7 +782,8 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
           <b>alt+t</b> expand turns
         </text>
       </Show>
-      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} />}</Show>
+      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} pinned={pinned()} onDismiss={dismissTip} />}</Show>
+      </Show>
     </box>
   )
 }

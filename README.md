@@ -17,7 +17,8 @@ Alt+T            # toggle the expanded Turn navigator panel
   sits at the bottom. The list fills the remaining sidebar height and gains a
   vertical scrollbar as soon as its turns exceed the visible rows. A fixed
   `alt+t expand turns` hint sits below the list, outside the list's scroll area.
-  Nothing needs to be enabled.
+  Click the triangle at the left of the `Turns` header to collapse or expand the
+  whole block; the choice is remembered. Nothing needs to be enabled.
 - **Expanded panel.** `Alt+T` opens the complete list (every loaded turn,
   oldest first) in the right pane, which is useful on narrow terminals or for
   long sessions. Use `↑`/`↓` to move, `Home`/`End` for the first/last entry,
@@ -39,7 +40,10 @@ Both views show the turn number and prompt preview; compaction rows use a `⇣`
 marker instead. Hovering a turn shows the full prompt, and hovering a compaction
 shows its details, in a floating tooltip that preserves line breaks without
 changing the row height or scroll position. The tooltip sits beside the row and
-moves above it near the bottom of the terminal. While the session is running,
+moves above it near the bottom of the terminal. After three seconds over the same
+row the tooltip pins: it stays open after the pointer leaves, until the user
+clicks outside it or hovers another row. Long pinned content scrolls with the
+wheel and shows a vertical scrollbar. While the session is running,
 the newest turn carries a one-cell square at the end of its row: one edge lights
 every 280ms in clockwise order (`▀`, `▐`, `▄`, `▌`), so the border appears to
 flow gently around it. The square is only rendered while the run is active, so
