@@ -13,6 +13,7 @@ const PREVIOUS_MESSAGE_COMMAND = "session.message.previous"
 const NEXT_MESSAGE_COMMAND = "session.message.next"
 const JUMP_SETTLE_MS = 120
 const TOOLTIP_PIN_MS = 300
+const TOOLTIP_MIN_ROWS = 8
 
 // A single cell; each frame lights one edge in clockwise order so the border
 // appears to flow around it.
@@ -173,6 +174,7 @@ function TurnTooltip(props: {
   const [wrapper, setWrapper] = createSignal<BoxRenderable>()
   const [height, setHeight] = createSignal(0)
   const [contentHeight, setContentHeight] = createSignal(0)
+  const minTooltipHeight = () => Math.min(TOOLTIP_MIN_ROWS, props.state.paneHeight)
   const maxContentHeight = () => Math.max(1, props.state.paneHeight - 3)
   const needsScroll = () => contentHeight() > maxContentHeight()
   const measureContent = function (this: Renderable) {
@@ -235,6 +237,7 @@ function TurnTooltip(props: {
     >
       <box
         width={width()}
+        minHeight={minTooltipHeight()}
         maxHeight={Math.max(1, props.state.paneHeight)}
         overflow="hidden"
         border
@@ -250,42 +253,44 @@ function TurnTooltip(props: {
             {props.pinned ? "\u{1F512}\uFE0E Pinned" : "\u{1F513}\uFE0E Unpinned"}
           </text>
         </box>
-        <Show
-          when={needsScroll()}
-          fallback={
-            <box width="100%" maxHeight={maxContentHeight()} overflow="hidden">
-              <box width="100%" paddingLeft={1} paddingRight={1} onSizeChange={measureContent}>
+        <box flexDirection="column" flexGrow={1} minHeight={0} justifyContent="center">
+          <Show
+            when={needsScroll()}
+            fallback={
+              <box width="100%" maxHeight={maxContentHeight()} overflow="hidden">
+                <box width="100%" paddingLeft={1} paddingRight={1} onSizeChange={measureContent}>
+                  <text fg={theme.text.base} wrapMode="word">
+                    {props.state.text}
+                  </text>
+                </box>
+              </box>
+            }
+          >
+            <scrollbox
+              width="100%"
+              height={maxContentHeight()}
+              flexShrink={0}
+              horizontalScrollbarOptions={{ visible: false }}
+              verticalScrollbarOptions={{
+                position: "absolute",
+                right: 0,
+                top: 0,
+                width: 1,
+                height: "100%",
+                trackOptions: {
+                  backgroundColor: theme.background.raised.max,
+                  foregroundColor: theme.scrollbar.base,
+                },
+              }}
+            >
+              <box width="100%" paddingLeft={1} paddingRight={1}>
                 <text fg={theme.text.base} wrapMode="word">
                   {props.state.text}
                 </text>
               </box>
-            </box>
-          }
-        >
-          <scrollbox
-            width="100%"
-            height={maxContentHeight()}
-            flexShrink={0}
-            horizontalScrollbarOptions={{ visible: false }}
-            verticalScrollbarOptions={{
-              position: "absolute",
-              right: 0,
-              top: 0,
-              width: 1,
-              height: "100%",
-              trackOptions: {
-                backgroundColor: theme.background.raised.max,
-                foregroundColor: theme.scrollbar.base,
-              },
-            }}
-          >
-            <box width="100%" paddingLeft={1} paddingRight={1}>
-              <text fg={theme.text.base} wrapMode="word">
-                {props.state.text}
-              </text>
-            </box>
-          </scrollbox>
-        </Show>
+            </scrollbox>
+          </Show>
+        </box>
       </box>
     </Portal>
   )
