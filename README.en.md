@@ -1,6 +1,6 @@
 # Turn Navigator
 
-[English](README.en.md) | [简体中文](README.md)
+[English](README.en.md) | [简体中文](README.md) | [Release process](RELEASE.md)
 
 A TUI-only OpenCode plugin for browsing conversation turns, inspecting compaction details, and jumping through the transcript.
 

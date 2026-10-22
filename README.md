@@ -1,6 +1,6 @@
 # Turn Navigator
 
-简体中文 | [English](README.en.md)
+简体中文 | [English](README.en.md) | [发布流程](RELEASE.md)
 
 一个 OpenCode 终端界面（TUI）插件，用于浏览会话轮次、查看上下文压缩信息，并在对话记录中跳转。
 
