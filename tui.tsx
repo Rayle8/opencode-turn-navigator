@@ -172,6 +172,18 @@ function TurnTooltip(props: {
   const theme = props.context.theme
   const [wrapper, setWrapper] = createSignal<BoxRenderable>()
   const [height, setHeight] = createSignal(0)
+  const [contentHeight, setContentHeight] = createSignal(0)
+  const maxContentHeight = () => Math.max(1, props.state.paneHeight - 3)
+  const needsScroll = () => contentHeight() > maxContentHeight()
+  const measureContent = function (this: Renderable) {
+    setContentHeight(this.height)
+  }
+  let measuredID: string | undefined
+  createEffect(() => {
+    const id = props.state.id
+    if (measuredID !== undefined && measuredID !== id) setContentHeight(0)
+    measuredID = id
+  })
   const width = () =>
     Math.max(20, Math.min(60, Math.floor(props.state.terminalWidth / 2), props.state.terminalWidth - 6))
   const left = () => {
@@ -238,29 +250,42 @@ function TurnTooltip(props: {
             {props.pinned ? "\u{1F512}\uFE0E Pinned" : "\u{1F513}\uFE0E Unpinned"}
           </text>
         </box>
-        <scrollbox
-          width="100%"
-          maxHeight={Math.max(1, props.state.paneHeight - 3)}
-          flexShrink={1}
-          horizontalScrollbarOptions={{ visible: false }}
-          verticalScrollbarOptions={{
-            position: "absolute",
-            right: 0,
-            top: 0,
-            width: 1,
-            height: "100%",
-            trackOptions: {
-              backgroundColor: theme.background.raised.max,
-              foregroundColor: theme.scrollbar.base,
-            },
-          }}
+        <Show
+          when={needsScroll()}
+          fallback={
+            <box width="100%" maxHeight={maxContentHeight()} overflow="hidden">
+              <box width="100%" paddingLeft={1} paddingRight={1} onSizeChange={measureContent}>
+                <text fg={theme.text.base} wrapMode="word">
+                  {props.state.text}
+                </text>
+              </box>
+            </box>
+          }
         >
-          <box width="100%" paddingLeft={1} paddingRight={1}>
-            <text fg={theme.text.base} wrapMode="word">
-              {props.state.text}
-            </text>
-          </box>
-        </scrollbox>
+          <scrollbox
+            width="100%"
+            height={maxContentHeight()}
+            flexShrink={0}
+            horizontalScrollbarOptions={{ visible: false }}
+            verticalScrollbarOptions={{
+              position: "absolute",
+              right: 0,
+              top: 0,
+              width: 1,
+              height: "100%",
+              trackOptions: {
+                backgroundColor: theme.background.raised.max,
+                foregroundColor: theme.scrollbar.base,
+              },
+            }}
+          >
+            <box width="100%" paddingLeft={1} paddingRight={1}>
+              <text fg={theme.text.base} wrapMode="word">
+                {props.state.text}
+              </text>
+            </box>
+          </scrollbox>
+        </Show>
       </box>
     </Portal>
   )
