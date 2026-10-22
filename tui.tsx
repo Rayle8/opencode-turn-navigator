@@ -12,7 +12,6 @@ const PREVIOUS_USER_COMMAND = "session.message.user.previous"
 const PREVIOUS_MESSAGE_COMMAND = "session.message.previous"
 const NEXT_MESSAGE_COMMAND = "session.message.next"
 const JUMP_SETTLE_MS = 120
-const TOOLTIP_PIN_MS = 3000
 
 // A single cell; each frame lights one edge in clockwise order so the border
 // appears to flow around it.
@@ -149,6 +148,16 @@ type TooltipState = {
   readonly rowWidth: number
   readonly terminalWidth: number
   readonly terminalHeight: number
+  readonly paneTop: number
+  readonly paneHeight: number
+}
+
+function sessionPaneBounds(context: Plugin.Context) {
+  const pane = context.renderer.root.findDescendantById("session-pane")
+  if (!pane || pane.isDestroyed || pane.height <= 0) {
+    return { top: 0, height: context.renderer.height }
+  }
+  return { top: pane.screenY, height: pane.height }
 }
 
 // The row itself never grows: the full prompt is drawn in a root-level overlay
@@ -157,6 +166,7 @@ function TurnTooltip(props: {
   context: Plugin.Context
   state: TooltipState
   pinned: boolean
+  countdown: number
   onDismiss: () => void
 }) {
   const theme = props.context.theme
@@ -175,9 +185,10 @@ function TurnTooltip(props: {
   }
   const top = () => {
     const state = props.state
-    if (height() === 0) return Math.max(0, state.screenY)
-    if (state.screenY + height() <= state.terminalHeight - 1) return Math.max(0, state.screenY)
-    return Math.max(0, state.screenY - height())
+    const current = height()
+    const preferred = current === 0 ? state.screenY : state.screenY - Math.round((current - 1) / 2)
+    const lowest = state.paneTop + state.paneHeight - Math.max(1, current)
+    return Math.max(state.paneTop, Math.min(preferred, lowest))
   }
   createEffect(() => {
     const node = wrapper()
@@ -212,7 +223,7 @@ function TurnTooltip(props: {
     >
       <box
         width={width()}
-        maxHeight={Math.max(1, props.state.terminalHeight - 2)}
+        maxHeight={Math.max(1, props.state.paneHeight)}
         overflow="hidden"
         border
         borderColor={theme.border.base}
@@ -224,7 +235,7 @@ function TurnTooltip(props: {
       >
         <scrollbox
           width="100%"
-          maxHeight={Math.max(1, props.state.terminalHeight - 4)}
+          maxHeight={Math.max(1, props.state.paneHeight - 3)}
           flexShrink={1}
           horizontalScrollbarOptions={{ visible: false }}
           verticalScrollbarOptions={{
@@ -245,6 +256,11 @@ function TurnTooltip(props: {
             </text>
           </box>
         </scrollbox>
+        <box flexDirection="row" justifyContent="flex-end" flexShrink={0} paddingRight={1}>
+          <text fg={props.pinned ? theme.text.feedback.success.base : theme.text.muted} wrapMode="none">
+            {props.pinned ? "(\u{1F512})" : `(\u{1F513} ${props.countdown})`}
+          </text>
+        </box>
       </box>
     </Portal>
   )
@@ -256,16 +272,34 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   const [hovered, setHovered] = createSignal<string>()
   const [tip, setTip] = createSignal<TooltipState>()
   const [pinned, setPinned] = createSignal(false)
-  let pinTimer: ReturnType<typeof setTimeout> | undefined
+  const [countdown, setCountdown] = createSignal(3)
+  let pinTimer: ReturnType<typeof setInterval> | undefined
   const clearPinTimer = () => {
-    if (pinTimer) clearTimeout(pinTimer)
+    if (pinTimer) clearInterval(pinTimer)
     pinTimer = undefined
   }
   const dismissTip = () => {
     clearPinTimer()
     setPinned(false)
+    setCountdown(3)
     setHovered(undefined)
     setTip(undefined)
+  }
+  const armPin = (entry: TurnsEntry) => {
+    setPinned(false)
+    clearPinTimer()
+    setCountdown(3)
+    let remaining = 3
+    pinTimer = setInterval(() => {
+      remaining -= 1
+      if (remaining > 0) {
+        setCountdown(remaining)
+        return
+      }
+      clearPinTimer()
+      setCountdown(0)
+      if (tip()?.id === entry.id && hovered() === entry.id) setPinned(true)
+    }, 1000)
   }
   const selected = () => remembered.id
   const setSelected = (id: string | undefined) => {
@@ -348,6 +382,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
       if (!same) dismissTip()
       return
     }
+    const pane = sessionPaneBounds(props.context)
     setTip({
       id: entry.id,
       text: entry.full,
@@ -356,17 +391,11 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
       rowWidth: row.width,
       terminalWidth: props.context.renderer.width,
       terminalHeight: props.context.renderer.height,
+      paneTop: pane.top,
+      paneHeight: pane.height,
     })
-    if (same) {
-      if (pinned() || pinTimer) return
-    } else {
-      setPinned(false)
-      clearPinTimer()
-    }
-    pinTimer = setTimeout(() => {
-      pinTimer = undefined
-      if (tip()?.id === entry.id && hovered() === entry.id) setPinned(true)
-    }, TOOLTIP_PIN_MS)
+    if (same && (pinned() || pinTimer)) return
+    armPin(entry)
   }
 
   const hideTip = (id: string) => {
@@ -551,7 +580,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
         </text>
       </box>
 
-      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} pinned={pinned()} onDismiss={dismissTip} />}</Show>
+      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} pinned={pinned()} countdown={countdown()} onDismiss={dismissTip} />}</Show>
     </box>
   )
 }
@@ -562,14 +591,16 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   const [hovered, setHovered] = createSignal<string>()
   const [tip, setTip] = createSignal<TooltipState>()
   const [pinned, setPinned] = createSignal(false)
-  let pinTimer: ReturnType<typeof setTimeout> | undefined
+  const [countdown, setCountdown] = createSignal(3)
+  let pinTimer: ReturnType<typeof setInterval> | undefined
   const clearPinTimer = () => {
-    if (pinTimer) clearTimeout(pinTimer)
+    if (pinTimer) clearInterval(pinTimer)
     pinTimer = undefined
   }
   const dismissTip = () => {
     clearPinTimer()
     setPinned(false)
+    setCountdown(3)
     setHovered(undefined)
     setTip(undefined)
   }
@@ -578,6 +609,22 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
     void updateView((draft) => {
       draft.open = !draft.open
     }).catch((error) => console.error("Failed to persist Turns sidebar state", error))
+  }
+  const armPin = (entry: TurnsEntry) => {
+    setPinned(false)
+    clearPinTimer()
+    setCountdown(3)
+    let remaining = 3
+    pinTimer = setInterval(() => {
+      remaining -= 1
+      if (remaining > 0) {
+        setCountdown(remaining)
+        return
+      }
+      clearPinTimer()
+      setCountdown(0)
+      if (tip()?.id === entry.id && hovered() === entry.id) setPinned(true)
+    }, 1000)
   }
   const jump = createTimelineJump(props.context)
   const jumpCompact = createCompactionJump(props.context)
@@ -655,6 +702,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
       if (!same) dismissTip()
       return
     }
+    const pane = sessionPaneBounds(props.context)
     setTip({
       id: entry.id,
       text: entry.full,
@@ -663,17 +711,11 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
       rowWidth: row.width,
       terminalWidth: props.context.renderer.width,
       terminalHeight: props.context.renderer.height,
+      paneTop: pane.top,
+      paneHeight: pane.height,
     })
-    if (same) {
-      if (pinned() || pinTimer) return
-    } else {
-      setPinned(false)
-      clearPinTimer()
-    }
-    pinTimer = setTimeout(() => {
-      pinTimer = undefined
-      if (tip()?.id === entry.id && hovered() === entry.id) setPinned(true)
-    }, TOOLTIP_PIN_MS)
+    if (same && (pinned() || pinTimer)) return
+    armPin(entry)
   }
 
   const hideTip = (id: string) => {
@@ -782,7 +824,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
           <b>alt+t</b> expand turns
         </text>
       </Show>
-      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} pinned={pinned()} onDismiss={dismissTip} />}</Show>
+      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} pinned={pinned()} countdown={countdown()} onDismiss={dismissTip} />}</Show>
       </Show>
     </box>
   )

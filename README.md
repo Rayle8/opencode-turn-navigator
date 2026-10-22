@@ -39,11 +39,13 @@ navigation does not expose compaction rows themselves.
 Both views show the turn number and prompt preview; compaction rows use a `⇣`
 marker instead. Hovering a turn shows the full prompt, and hovering a compaction
 shows its details, in a floating tooltip that preserves line breaks without
-changing the row height or scroll position. The tooltip sits beside the row and
-moves above it near the bottom of the terminal. After three seconds over the same
-row the tooltip pins: it stays open after the pointer leaves, until the user
-clicks outside it or hovers another row. Long pinned content scrolls with the
-wheel and shows a vertical scrollbar. While the session is running,
+changing the row height or scroll position. The tooltip is vertically centered on
+the hovered title and grows with its content, up to the height of the left
+session pane; longer content scrolls with a vertical scrollbar. Its bottom-right
+corner shows a lock badge: `(🔓 3)`, `(🔓 2)`, `(🔓 1)` while the automatic pin
+counts down, then `(🔒)` once the tooltip is fixed. After three seconds over the
+same row the tooltip stays open after the pointer leaves, until the user clicks
+outside it or hovers another row. While the session is running,
 the newest turn carries a one-cell square at the end of its row: one edge lights
 every 280ms in clockwise order (`▀`, `▐`, `▄`, `▌`), so the border appears to
 flow gently around it. The square is only rendered while the run is active, so
