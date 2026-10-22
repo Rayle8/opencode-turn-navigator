@@ -10,7 +10,7 @@ Alt+T       Open or close the expanded Turn navigator panel
 <leader>b   Show or hide the sidebar using the host binding
 ```
 
-## Screenshots
+## Demo
 
 ### With the plugin installed
 
@@ -22,20 +22,24 @@ Alt+T       Open or close the expanded Turn navigator panel
 
 ## Install
 
-Place the plugin files in one of the directories below. The plugin only needs `tui.tsx` and `turns.ts`. The sparse clone commands below skip the README, screenshots, and other unrelated files, and download only these two source files. OpenCode usually picks up the plugin without a restart; if it does not appear in the current session, switch sessions and check again.
+The plugin only needs `tui.tsx` and `turns.ts`. The command-line installation skips the README, screenshots, and other unrelated files, downloading only these two source files. OpenCode usually picks up the plugin without a restart; if it does not appear in the current session, switch sessions and check again.
 
-### Install globally (available in every project)
+### Install with an agent instruction
+
+Send this prompt to an OpenCode agent with terminal access to install the plugin globally (available in every project):
+
+```text
+Install OpenCode Turn Navigator from https://github.com/Rayle8/opencode-turn-navigator in my global OpenCode plugin directory (macOS / Linux: ~/.config/opencode/plugins/turn-navigator; Windows: %USERPROFILE%\.config\opencode\plugins\turn-navigator). Check out and install only tui.tsx and turns.ts. No restart should be needed; tell me how to confirm that the plugin loaded.
+```
+
+### Install with commands
+
+#### Install globally (available in every project)
 
 | Platform | Plugin directory |
 | --- | --- |
 | macOS / Linux | `~/.config/opencode/plugins/turn-navigator/` |
 | Windows | `%USERPROFILE%\.config\opencode\plugins\turn-navigator\` |
-
-You can also send this prompt to an OpenCode agent with terminal access:
-
-```text
-Install OpenCode Turn Navigator from https://github.com/Rayle8/opencode-turn-navigator in my global OpenCode plugin directory (macOS / Linux: ~/.config/opencode/plugins/turn-navigator; Windows: %USERPROFILE%\.config\opencode\plugins\turn-navigator). Check out and install only tui.tsx and turns.ts. No restart should be needed; tell me how to confirm that the plugin loaded.
-```
 
 macOS / Linux:
 
@@ -54,7 +58,7 @@ git clone --depth 1 --filter=blob:none --no-checkout --branch main https://githu
 git -C $pluginDir sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
 
-### Install for one project only
+#### Install for one project only
 
 Run this from the project root:
 
@@ -70,7 +74,9 @@ OpenCode loads local plugins from the global plugin directory `~/.config/opencod
 
 After installation, open or switch to a session wide enough to show the sidebar and confirm that the `Turns` section appears. Click a turn to jump, or press `Alt+T` to open the full list. A restart is usually not needed.
 
-## Where it appears
+## Usage
+
+### Where it appears
 
 - **Sidebar (default).** On terminals wide enough for the sidebar, a `Turns` section is appended after the existing session title, Context, todo, and MCP blocks. It lists every loaded turn in chronological order, with the newest at the bottom. The list fills the remaining sidebar height and becomes scrollable when turns exceed the visible rows. A fixed `alt+t expand turns` hint sits below the list. Click the triangle beside the `Turns` header to collapse or expand the block; the choice is remembered. Nothing needs to be enabled.
 - **Expanded panel.** Press `Alt+T` to open the complete list of loaded turns, oldest first, in the right pane. This is useful on narrow terminals or in long sessions. Use `↑` / `↓` to move, `Home` / `End` for the first or last entry, `Enter` to jump, and `Escape` to close. The last selected row is remembered and scrolled into view.
@@ -83,7 +89,7 @@ Both views show the turn number and prompt preview; compaction rows use a `⇣` 
 
 While a session is running, the newest turn has a one-cell square at the end of its row. One edge lights every 280 ms in clockwise order (`▀`, `▐`, `▄`, `▌`), making the border appear to flow. The square disappears as soon as the session goes idle. When the expanded pane is wide enough, it also shows the time and reply/tool counts.
 
-## How jumping works
+### How jumping works
 
 The TUI plugin API does not expose transcript scrolling, and the transcript is virtualized. The plugin therefore uses the host's public message-navigation commands:
 
@@ -98,7 +104,7 @@ No dialog is opened, so there is no popup or flicker. The sidebar never takes th
 
 If those commands are not reachable (for example, after a future host change), the plugin reports it.
 
-## Limitation: no left-side frame
+### Limitation: no left-side frame
 
 A pure plugin cannot draw anything around the transcript. The published slot tree only covers `app`, `prompt.footer*`, `session.composer.top`, `session.panel`, and `sidebar.*`; there is no transcript slot and no “wrap” placement that would let a claim surround existing content.
 

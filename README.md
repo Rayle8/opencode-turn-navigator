@@ -4,13 +4,7 @@
 
 一个 OpenCode 终端界面（TUI）插件，用于浏览会话轮次、查看上下文压缩信息，并在对话记录中跳转。
 
-```text
-Alt+T       打开或关闭完整轮次面板
-/turns      在输入框中执行相同操作
-<leader>b   使用 OpenCode 的快捷键显示或隐藏侧栏
-```
-
-## 截图
+## 效果演示
 
 ### 安装插件后
 
@@ -22,20 +16,24 @@ Alt+T       打开或关闭完整轮次面板
 
 ## 安装
 
-将插件文件放入以下任一插件目录。插件只需要 `tui.tsx` 和 `turns.ts`；下面的精简克隆命令会跳过 README、截图和其他无关文件，并仅下载这两个源码文件。安装完成后通常无需重启 OpenCode；如果当前会话还没有显示插件，切换会话后再检查。
+插件只需要 `tui.tsx` 和 `turns.ts`。程序命令安装会跳过 README、截图和其他无关文件，仅下载这两个源码文件。安装完成后通常无需重启 OpenCode；如果当前会话还没有显示插件，切换会话后再检查。
 
-### 全局安装（所有项目可用）
+### 通过指令安装
+
+把下面的提示词发给支持终端操作的 OpenCode 助手，可将插件安装到全局目录（所有项目可用）：
+
+```text
+请从 https://github.com/Rayle8/opencode-turn-navigator 安装 OpenCode Turn Navigator，并放入当前用户的全局 OpenCode 插件目录（macOS / Linux：~/.config/opencode/plugins/turn-navigator；Windows：%USERPROFILE%\.config\opencode\plugins\turn-navigator）。只检出并安装 tui.tsx 和 turns.ts。安装后无需重启 OpenCode；请告诉我如何确认插件已加载。
+```
+
+### 通过程序命令安装
+
+#### 全局安装（所有项目可用）
 
 | 系统 | 插件目录 |
 | --- | --- |
 | macOS / Linux | `~/.config/opencode/plugins/turn-navigator/` |
 | Windows | `%USERPROFILE%\.config\opencode\plugins\turn-navigator\` |
-
-也可以把下面的提示词发给支持终端操作的 OpenCode 助手：
-
-```text
-请从 https://github.com/Rayle8/opencode-turn-navigator 安装 OpenCode Turn Navigator，并放入当前用户的全局 OpenCode 插件目录（macOS / Linux：~/.config/opencode/plugins/turn-navigator；Windows：%USERPROFILE%\.config\opencode\plugins\turn-navigator）。只检出并安装 tui.tsx 和 turns.ts。安装后无需重启 OpenCode；请告诉我如何确认插件已加载。
-```
 
 macOS / Linux：
 
@@ -54,7 +52,7 @@ git clone --depth 1 --filter=blob:none --no-checkout --branch main https://githu
 git -C $pluginDir sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
 
-### 仅在当前项目安装
+#### 仅在当前项目安装
 
 在项目根目录执行：
 
@@ -70,7 +68,9 @@ OpenCode 会从全局插件目录 `~/.config/opencode/plugins/`（Windows：`%US
 
 安装后打开或切换到一个可以显示侧栏的会话，确认出现 `Turns` 区块；点击轮次可跳转，按 `Alt+T` 打开完整列表。通常无需重启 OpenCode。
 
-## 插件显示位置
+## 使用说明
+
+### 插件显示位置
 
 - **侧栏（默认）**：在支持侧栏的终端中，`Turns` 区块显示在会话标题、Context、todo 和 MCP 信息之后，按时间顺序列出当前已加载的轮次，最新轮次位于底部。列表会使用剩余侧栏高度；轮次数超过可见行数时可滚动。列表下方固定显示 `alt+t expand turns` 提示。点击 `Turns` 标题左侧的三角形可折叠或展开区块，选择会被记住，无需启用额外选项。
 - **完整轮次面板**：按 `Alt+T` 在右侧打开所有已加载轮次，按从旧到新的顺序排列，适合较窄的终端或较长的会话。用 `↑` / `↓` 移动，`Home` / `End` 跳到首项或末项，`Enter` 跳转，`Escape` 关闭。上次选择的行会被记住并滚动到可见区域。
@@ -83,7 +83,7 @@ OpenCode 会从全局插件目录 `~/.config/opencode/plugins/`（Windows：`%US
 
 会话运行期间，最新轮次行尾会显示一个单格方框，每 280 毫秒按顺时针点亮一条边（`▀`、`▐`、`▄`、`▌`），形成流动效果。会话空闲后方框消失。展开面板宽度足够时还会显示时间，以及回复数和工具调用数。
 
-## 跳转方式
+### 跳转方式
 
 OpenCode 的 TUI 插件 API 没有提供滚动对话记录的接口，而且对话记录采用虚拟化渲染。因此，插件使用 OpenCode 公开的消息导航命令：
 
@@ -98,7 +98,7 @@ OpenCode 的 TUI 插件 API 没有提供滚动对话记录的接口，而且对�
 
 如果主机版本变更导致这些导航命令不可用，插件会显示提示。
 
-## 限制：无法在对话左侧绘制边框
+### 限制：无法在对话左侧绘制边框
 
 纯插件无法在对话记录周围绘制内容。OpenCode 当前公开的插槽树只包含 `app`、`prompt.footer*`、`session.composer.top`、`session.panel` 和 `sidebar.*`，没有对话记录插槽，也没有能包围现有内容的“wrap”布局方式。
 
