@@ -22,7 +22,7 @@ Alt+T       Open or close the expanded Turn navigator panel
 
 ## Install
 
-Place the repository files in one of the plugin directories below, then restart OpenCode. The plugin directory must contain `tui.tsx` and `turns.ts`.
+Place the plugin files in one of the directories below, then restart OpenCode. The plugin only needs `tui.tsx` and `turns.ts`. The sparse clone commands below skip the README, screenshots, and other unrelated files, and download only these two source files.
 
 ### Install globally (available in every project)
 
@@ -35,14 +35,17 @@ macOS / Linux:
 
 ```sh
 mkdir -p ~/.config/opencode/plugins
-git clone https://github.com/Rayle8/opencode-turn-navigator.git ~/.config/opencode/plugins/turn-navigator
+git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git ~/.config/opencode/plugins/turn-navigator
+git -C ~/.config/opencode/plugins/turn-navigator sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
 
 Windows PowerShell:
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.config\opencode\plugins" | Out-Null
-git clone https://github.com/Rayle8/opencode-turn-navigator.git "$env:USERPROFILE\.config\opencode\plugins\turn-navigator"
+$pluginDir = "$env:USERPROFILE\.config\opencode\plugins\turn-navigator"
+git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git $pluginDir
+git -C $pluginDir sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
 
 ### Install for one project only
@@ -51,8 +54,11 @@ Run this from the project root:
 
 ```sh
 mkdir -p .opencode/plugins
-git clone https://github.com/Rayle8/opencode-turn-navigator.git .opencode/plugins/turn-navigator
+git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git .opencode/plugins/turn-navigator
+git -C .opencode/plugins/turn-navigator sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
+
+To update a global installation, run `git -C ~/.config/opencode/plugins/turn-navigator pull --ff-only`. For a project installation, replace the path with `.opencode/plugins/turn-navigator`.
 
 OpenCode loads local plugins from the global plugin directory `~/.config/opencode/plugins/` (Windows: `%USERPROFILE%\.config\opencode\plugins\`) and the project directory `<project-root>/.opencode/plugins/`. No `opencode.json` change, dependency installation, or build step is required.
 

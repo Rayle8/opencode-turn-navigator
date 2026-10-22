@@ -22,7 +22,7 @@ Alt+T       打开或关闭完整轮次面板
 
 ## 安装
 
-将仓库文件放入以下任一插件目录，然后重启 OpenCode。插件目录中需要包含 `tui.tsx` 和 `turns.ts`。
+将插件文件放入以下任一插件目录，然后重启 OpenCode。插件只需要 `tui.tsx` 和 `turns.ts`；下面的精简克隆命令会跳过 README、截图和其他无关文件，并仅下载这两个源码文件。
 
 ### 全局安装（所有项目可用）
 
@@ -35,14 +35,17 @@ macOS / Linux：
 
 ```sh
 mkdir -p ~/.config/opencode/plugins
-git clone https://github.com/Rayle8/opencode-turn-navigator.git ~/.config/opencode/plugins/turn-navigator
+git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git ~/.config/opencode/plugins/turn-navigator
+git -C ~/.config/opencode/plugins/turn-navigator sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
 
 Windows PowerShell：
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.config\opencode\plugins" | Out-Null
-git clone https://github.com/Rayle8/opencode-turn-navigator.git "$env:USERPROFILE\.config\opencode\plugins\turn-navigator"
+$pluginDir = "$env:USERPROFILE\.config\opencode\plugins\turn-navigator"
+git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git $pluginDir
+git -C $pluginDir sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
 
 ### 仅在当前项目安装
@@ -51,8 +54,11 @@ git clone https://github.com/Rayle8/opencode-turn-navigator.git "$env:USERPROFIL
 
 ```sh
 mkdir -p .opencode/plugins
-git clone https://github.com/Rayle8/opencode-turn-navigator.git .opencode/plugins/turn-navigator
+git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git .opencode/plugins/turn-navigator
+git -C .opencode/plugins/turn-navigator sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
+
+更新全局安装时运行 `git -C ~/.config/opencode/plugins/turn-navigator pull --ff-only`；项目级安装时，将路径替换为 `.opencode/plugins/turn-navigator`。
 
 OpenCode 会从全局插件目录 `~/.config/opencode/plugins/`（Windows：`%USERPROFILE%\.config\opencode\plugins\`）和项目目录 `<项目根目录>/.opencode/plugins/` 加载本地插件。无需修改 `opencode.json`，也无需额外安装依赖或构建。
 
