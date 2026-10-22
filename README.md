@@ -20,7 +20,9 @@ Alt+T            # toggle the expanded Turn navigator panel
   Nothing needs to be enabled.
 - **Expanded panel.** `Alt+T` opens the complete list (every loaded turn,
   oldest first) in the right pane, which is useful on narrow terminals or for
-  long sessions. The row selected last is remembered and scrolled into view.
+  long sessions. Use `↑`/`↓` to move, `Home`/`End` for the first/last entry,
+  `Enter` to jump, and `Escape` to close. The row selected last is remembered
+  and scrolled into view.
 
 Compaction messages appear between turns. Their row shows the context saved once
 the next assistant step reports it (for example `compact · saved 82.3k (68%)`);

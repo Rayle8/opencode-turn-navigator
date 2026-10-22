@@ -313,30 +313,30 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     commands: [
       {
         id: "turn-navigator.panel.next",
-        title: "Next turn",
+        title: "Next entry",
         group: "Turn navigator",
-        bind: "j",
+        bind: "down",
         run: () => move(1),
       },
       {
         id: "turn-navigator.panel.previous",
-        title: "Previous turn",
+        title: "Previous entry",
         group: "Turn navigator",
-        bind: "k",
+        bind: "up",
         run: () => move(-1),
       },
       {
         id: "turn-navigator.panel.first",
         title: "First entry",
         group: "Turn navigator",
-        bind: "g",
+        bind: "home",
         run: () => select(entries()[0]),
       },
       {
         id: "turn-navigator.panel.last",
         title: "Last entry",
         group: "Turn navigator",
-        bind: "shift+g",
+        bind: "end",
         run: () => select(entries()[entries().length - 1]),
       },
       {
@@ -471,7 +471,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
           click / enter jump · ctrl+click last reply
         </text>
         <text fg={theme.text.faint} wrapMode="none" truncate>
-          j k move · g shift+g first/last · alt+t close
+          ↑↓ move · home end first/last · alt+t close
         </text>
       </box>
 
