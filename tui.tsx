@@ -12,7 +12,7 @@ const PREVIOUS_USER_COMMAND = "session.message.user.previous"
 const PREVIOUS_MESSAGE_COMMAND = "session.message.previous"
 const NEXT_MESSAGE_COMMAND = "session.message.next"
 const JUMP_SETTLE_MS = 120
-const TOOLTIP_PIN_MS = 500
+const TOOLTIP_PIN_MS = 300
 
 // A single cell; each frame lights one edge in clockwise order so the border
 // appears to flow around it.
@@ -173,7 +173,7 @@ function TurnTooltip(props: {
   const [wrapper, setWrapper] = createSignal<BoxRenderable>()
   const [height, setHeight] = createSignal(0)
   const width = () =>
-    Math.max(12, Math.min(60, Math.floor(props.state.terminalWidth / 2), props.state.terminalWidth - 6))
+    Math.max(20, Math.min(60, Math.floor(props.state.terminalWidth / 2), props.state.terminalWidth - 6))
   const left = () => {
     const state = props.state
     const gap = 2
@@ -235,7 +235,7 @@ function TurnTooltip(props: {
       >
         <box flexDirection="row" justifyContent="flex-end" flexShrink={0} paddingRight={1}>
           <text fg={theme.text.muted} wrapMode="none">
-            {props.pinned ? "(●)" : "(○)"}
+            {props.pinned ? "\u{1F512}\uFE0E Pinned" : "\u{1F513}\uFE0E Unpinned"}
           </text>
         </box>
         <scrollbox
