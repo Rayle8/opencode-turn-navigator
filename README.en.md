@@ -103,9 +103,3 @@ A compaction row starts at the same newest-user prompt and then walks `session.m
 No dialog is opened, so there is no popup or flicker. The sidebar never takes the session pane's input, so it jumps in place and stays open. The expanded panel owns input, which disables the session commands, so it closes first. It stays closed because reopening would reflow the transcript at a different width and move the aligned turn again. Press `Alt+T` to reopen it at the remembered turn.
 
 If those commands are not reachable (for example, after a future host change), the plugin reports it.
-
-### Limitation: no left-side frame
-
-A pure plugin cannot draw anything around the transcript. The published slot tree only covers `app`, `prompt.footer*`, `session.composer.top`, `session.panel`, and `sidebar.*`; there is no transcript slot and no “wrap” placement that would let a claim surround existing content.
-
-Boxing each turn therefore needs a small host addition: a per-turn slot plus scroll control. Until then, this plugin provides navigation only.
