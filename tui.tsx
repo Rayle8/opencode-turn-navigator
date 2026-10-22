@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import type { PanelInput } from "@opencode/plugin/tui/context"
 import type { BoxRenderable, Renderable, ScrollBoxRenderable } from "@opentui/core"
+import { Portal } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { collectTurns, formatClock, type Turn } from "./turns"
 
@@ -88,10 +89,81 @@ function createTimelineJump(context: Plugin.Context, options?: { prepare?: () =>
   }
 }
 
+type TooltipState = {
+  readonly id: string
+  readonly text: string
+  readonly screenX: number
+  readonly screenY: number
+  readonly rowWidth: number
+  readonly terminalWidth: number
+  readonly terminalHeight: number
+}
+
+// The row itself never grows: the full prompt is drawn in a root-level overlay
+// so the list geometry, scroll position, and hover target stay fixed.
+function TurnTooltip(props: { context: Plugin.Context; state: TooltipState }) {
+  const theme = props.context.theme
+  const [wrapper, setWrapper] = createSignal<BoxRenderable>()
+  const [height, setHeight] = createSignal(0)
+  const width = () =>
+    Math.max(12, Math.min(60, Math.floor(props.state.terminalWidth / 2), props.state.terminalWidth - 6))
+  const left = () => {
+    const state = props.state
+    const gap = 2
+    const right = state.screenX + state.rowWidth + gap
+    if (right + width() <= state.terminalWidth - 1) return right
+    const leftSide = state.screenX - gap - width()
+    if (leftSide >= 1) return leftSide
+    return Math.max(1, Math.min(right, state.terminalWidth - width() - 1))
+  }
+  const top = () => {
+    const state = props.state
+    if (height() === 0) return Math.max(0, state.screenY)
+    if (state.screenY + height() <= state.terminalHeight - 1) return Math.max(0, state.screenY)
+    return Math.max(0, state.screenY - height())
+  }
+  createEffect(() => {
+    const node = wrapper()
+    if (!node || node.isDestroyed) return
+    node.left = left()
+    node.top = top()
+  })
+  return (
+    <Portal
+      ref={(value) => {
+        const node = value as BoxRenderable
+        node.position = "absolute"
+        node.zIndex = 2200
+        node.flexDirection = "column"
+        setWrapper(node)
+      }}
+    >
+      <box
+        width={width()}
+        maxHeight={Math.max(1, props.state.terminalHeight - 2)}
+        overflow="hidden"
+        border
+        borderColor={theme.border.base}
+        backgroundColor={theme.background.raised.max}
+        paddingLeft={1}
+        paddingRight={1}
+        onSizeChange={function (this: BoxRenderable) {
+          setHeight(this.height)
+        }}
+      >
+        <text fg={theme.text.base} wrapMode="word">
+          {props.state.text}
+        </text>
+      </box>
+    </Portal>
+  )
+}
+
 function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   const theme = props.context.theme
   const [remembered, setRemembered] = props.context.storage.memory<{ id?: string }>("selection", { initial: {} })
   const [hovered, setHovered] = createSignal<string>()
+  const [tip, setTip] = createSignal<TooltipState>()
   const selected = () => remembered.id
   const setSelected = (id: string | undefined) => {
     setRemembered((draft) => {
@@ -152,7 +224,29 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
 
   const open = (turn: Turn, target: JumpTarget) => {
     setSelected(turn.id)
+    setTip(undefined)
     jump(turn, target)
+  }
+
+  const showTip = (turn: Turn) => {
+    setHovered(turn.id)
+    const index = ordered().findIndex((item) => item.id === turn.id)
+    const row = index === -1 ? undefined : scroll?.getChildren()[index]
+    if (!row || row.isDestroyed) return
+    setTip({
+      id: turn.id,
+      text: turn.full,
+      screenX: row.screenX,
+      screenY: row.screenY,
+      rowWidth: row.width,
+      terminalWidth: props.context.renderer.width,
+      terminalHeight: props.context.renderer.height,
+    })
+  }
+
+  const hideTip = (id: string) => {
+    if (hovered() === id) setHovered(undefined)
+    if (tip()?.id === id) setTip(undefined)
   }
 
   props.context.keymap.layer(() => ({
@@ -279,10 +373,8 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
                 paddingRight={1}
                 flexShrink={0}
                 backgroundColor={rowBackground(turn)}
-                onMouseOver={() => setHovered(turn.id)}
-                onMouseOut={() => {
-                  if (hovered() === turn.id) setHovered(undefined)
-                }}
+                onMouseOver={() => showTip(turn)}
+                onMouseOut={() => hideTip(turn.id)}
                 onMouseDown={() => props.panel.focus()}
                 onMouseUp={(event) => open(turn, event.modifiers.ctrl ? "reply" : "prompt")}
               >
@@ -292,14 +384,8 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
                 <text fg={theme.text.faint} wrapMode="none" flexShrink={0}>
                   {formatClock(turn.createdAt)}
                 </text>
-                <text
-                  fg={rowColor(turn)}
-                  wrapMode={hovered() === turn.id ? "word" : "none"}
-                  truncate={hovered() !== turn.id}
-                  flexGrow={1}
-                  minWidth={0}
-                >
-                  {hovered() === turn.id ? turn.full : turn.preview}
+                <text fg={rowColor(turn)} wrapMode="none" truncate flexGrow={1} minWidth={0}>
+                  {turn.preview}
                 </text>
                 <Show when={props.panel.width >= 46}>
                   <text fg={theme.text.faint} wrapMode="none" flexShrink={0}>
@@ -325,6 +411,8 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
           j k move · g shift+g first/last · alt+t close
         </text>
       </box>
+
+      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} />}</Show>
     </box>
   )
 }
@@ -332,6 +420,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
 function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   const theme = props.context.theme
   const [hovered, setHovered] = createSignal<string>()
+  const [tip, setTip] = createSignal<TooltipState>()
   const jump = createTimelineJump(props.context)
 
   const messages = createMemo(() => props.context.data.session.message.list(props.sessionID))
@@ -344,6 +433,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   // this section's top to the viewport bottom and let the list fill it.
   const [listRows, setListRows] = createSignal(SIDEBAR_TURN_ROWS)
   let root: BoxRenderable | undefined
+  let list: ScrollBoxRenderable | undefined
   let observed: ScrollBoxRenderable | undefined
 
   const measure = () => {
@@ -387,6 +477,27 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
     observed = undefined
   })
 
+  const showTip = (turn: Turn) => {
+    setHovered(turn.id)
+    const index = turns().findIndex((item) => item.id === turn.id)
+    const row = index === -1 ? undefined : list?.getChildren()[index]
+    if (!row || row.isDestroyed) return
+    setTip({
+      id: turn.id,
+      text: turn.full,
+      screenX: row.screenX,
+      screenY: row.screenY,
+      rowWidth: row.width,
+      terminalWidth: props.context.renderer.width,
+      terminalHeight: props.context.renderer.height,
+    })
+  }
+
+  const hideTip = (id: string) => {
+    if (hovered() === id) setHovered(undefined)
+    if (tip()?.id === id) setTip(undefined)
+  }
+
   return (
     <box ref={(value: BoxRenderable) => (root = value)}>
       <text fg={theme.text.base} wrapMode="none">
@@ -401,6 +512,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
         }
       >
         <scrollbox
+          ref={(value: ScrollBoxRenderable) => (list = value)}
           height={Math.min(turns().length, listRows())}
           flexShrink={0}
           stickyStart="bottom"
@@ -425,23 +537,24 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
                 paddingLeft={1}
                 paddingRight={1}
                 backgroundColor={hovered() === turn.id ? theme.background.raised.high : undefined}
-                onMouseOver={() => setHovered(turn.id)}
-                onMouseOut={() => {
-                  if (hovered() === turn.id) setHovered(undefined)
+                onMouseOver={() => showTip(turn)}
+                onMouseOut={() => hideTip(turn.id)}
+                onMouseUp={(event) => {
+                  setTip(undefined)
+                  jump(turn, event.modifiers.ctrl ? "reply" : "prompt")
                 }}
-                onMouseUp={(event) => jump(turn, event.modifiers.ctrl ? "reply" : "prompt")}
               >
                 <text fg={hovered() === turn.id ? theme.text.base : theme.text.muted} wrapMode="none" flexShrink={0}>
                   {turn.number}.
                 </text>
                 <text
                   fg={hovered() === turn.id ? theme.text.base : theme.text.muted}
-                  wrapMode={hovered() === turn.id ? "word" : "none"}
-                  truncate={hovered() !== turn.id}
+                  wrapMode="none"
+                  truncate
                   flexGrow={1}
                   minWidth={0}
                 >
-                  {hovered() === turn.id ? turn.full : turn.preview}
+                  {turn.preview}
                 </text>
                 <Show when={isRunningTurn(turn)}>
                   <text fg={hovered() === turn.id ? theme.text.base : theme.text.muted} wrapMode="none" flexShrink={0}>
@@ -453,6 +566,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
           </For>
         </scrollbox>
       </Show>
+      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} />}</Show>
     </box>
   )
 }

@@ -21,13 +21,15 @@ Alt+T            # toggle the expanded Turn navigator panel
   oldest first) in the right pane, which is useful on narrow terminals or for
   long sessions. The row selected last is remembered and scrolled into view.
 
-Both views show the turn number and prompt preview; hovering a row expands it
-to the full prompt, preserving its original line breaks. While the session is
-running, the newest turn carries a one-cell square at the end of its row: one
-edge lights every 280ms in clockwise order (`▀`, `▐`, `▄`, `▌`), so the border
-appears to flow gently around it. The square is only rendered while the run is
-active, so it disappears as soon as the session goes idle. The expanded view
-also shows the clock time and reply/tool counts when the pane is wide enough.
+Both views show the turn number and prompt preview; hovering a row shows the
+full prompt in a floating tooltip, preserving its original line breaks without
+changing the row height or scroll position. The tooltip sits beside the row and
+moves above it near the bottom of the terminal. While the session is running,
+the newest turn carries a one-cell square at the end of its row: one edge lights
+every 280ms in clockwise order (`▀`, `▐`, `▄`, `▌`), so the border appears to
+flow gently around it. The square is only rendered while the run is active, so
+it disappears as soon as the session goes idle. The expanded view also shows the
+clock time and reply/tool counts when the pane is wide enough.
 
 ## How jumping works
 
