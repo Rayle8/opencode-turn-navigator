@@ -22,8 +22,18 @@ Alt+T            # toggle the expanded Turn navigator panel
   oldest first) in the right pane, which is useful on narrow terminals or for
   long sessions. The row selected last is remembered and scrolled into view.
 
-Both views show the turn number and prompt preview; hovering a row shows the
-full prompt in a floating tooltip, preserving its original line breaks without
+Compaction messages appear between turns. Their row shows the context saved once
+the next assistant step reports it (for example `compact · saved 82.3k`); a
+running compaction shows `compact · running`, and a failed or cancelled one
+shows that outcome. Hovering a compaction row shows the before/after context,
+the exact saving and percentage, the compaction request's own token usage and
+cost, and the summary or error. Until the next assistant step lands, the row
+shows the previous size and an ellipsis instead of guessing the benefit.
+Compaction rows are informational, not transcript jump targets.
+
+Both views show the turn number and prompt preview; compaction rows use a `⇣`
+marker instead. Hovering a turn shows the full prompt, and hovering a compaction
+shows its details, in a floating tooltip that preserves line breaks without
 changing the row height or scroll position. The tooltip sits beside the row and
 moves above it near the bottom of the terminal. While the session is running,
 the newest turn carries a one-cell square at the end of its row: one edge lights

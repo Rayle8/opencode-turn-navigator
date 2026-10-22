@@ -3,7 +3,7 @@ import type { PanelInput } from "@opencode/plugin/tui/context"
 import type { BoxRenderable, Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { Portal } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { collectTurns, formatClock, type Turn } from "./turns"
+import { collectTimeline, formatClock, type Turn, type TurnsEntry } from "./turns"
 
 const PLUGIN_ID = "turn-navigator"
 const PANEL_NAME = "turn-navigator.turns"
@@ -177,15 +177,15 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   let scroll: ScrollBoxRenderable | undefined
 
   const messages = createMemo(() => props.context.data.session.message.list(props.panel.sessionID))
-  const turns = createMemo(() => collectTurns(messages()))
-  // Chronological, oldest first.
-  const ordered = createMemo(() => turns())
+  const timeline = createMemo(() => collectTimeline(messages()))
+  const turns = createMemo(() => timeline().turns)
+  const entries = createMemo(() => timeline().entries)
   const running = createMemo(() => props.context.data.session.status(props.panel.sessionID) === "running")
   const chase = createChase(running)
   const selectedTurn = createMemo(() => turns().find((turn) => turn.id === selected()))
 
   createEffect(() => {
-    const list = ordered()
+    const list = turns()
     if (list.length === 0) {
       setSelected(undefined)
       return
@@ -195,7 +195,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
 
   const reveal = (id: string | undefined) => {
     if (!id || !scroll || scroll.isDestroyed) return
-    const index = ordered().findIndex((turn) => turn.id === id)
+    const index = entries().findIndex((entry) => entry.id === id)
     const target = index === -1 ? undefined : scroll.getChildren()[index]
     if (!target) return
     const y = target.y - scroll.y
@@ -208,7 +208,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   })
 
   const move = (delta: number) => {
-    const list = ordered()
+    const list = turns()
     if (list.length === 0) return
     const index = list.findIndex((turn) => turn.id === selected())
     const next = index === -1 ? 0 : (index + delta + list.length) % list.length
@@ -222,20 +222,21 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     reveal(turn.id)
   }
 
-  const open = (turn: Turn, target: JumpTarget) => {
-    setSelected(turn.id)
+  const open = (entry: TurnsEntry, target: JumpTarget) => {
+    if (entry.kind !== "turn") return
+    setSelected(entry.id)
     setTip(undefined)
-    jump(turn, target)
+    jump(entry, target)
   }
 
-  const showTip = (turn: Turn) => {
-    setHovered(turn.id)
-    const index = ordered().findIndex((item) => item.id === turn.id)
+  const showTip = (entry: TurnsEntry) => {
+    setHovered(entry.id)
+    const index = entries().findIndex((item) => item.id === entry.id)
     const row = index === -1 ? undefined : scroll?.getChildren()[index]
     if (!row || row.isDestroyed) return
     setTip({
-      id: turn.id,
-      text: turn.full,
+      id: entry.id,
+      text: entry.full,
       screenX: row.screenX,
       screenY: row.screenY,
       rowWidth: row.width,
@@ -271,14 +272,14 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
         title: "First turn",
         group: "Turn navigator",
         bind: "g",
-        run: () => select(ordered()[0]),
+        run: () => select(turns()[0]),
       },
       {
         id: "turn-navigator.panel.last",
         title: "Last turn",
         group: "Turn navigator",
         bind: "shift+g",
-        run: () => select(ordered()[ordered().length - 1]),
+        run: () => select(turns()[turns().length - 1]),
       },
       {
         id: "turn-navigator.panel.open",
@@ -300,13 +301,17 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     ],
   }))
 
-  const isRunningTurn = (turn: Turn) => running() && turn.id === turns()[turns().length - 1]?.id
-  const rowBackground = (turn: Turn) => {
-    if (turn.id === selected()) return theme.background.raised.high
-    if (turn.id === hovered()) return theme.background.raised.max
+  const isRunningTurn = (entry: TurnsEntry) =>
+    entry.kind === "turn" && running() && entry.id === turns()[turns().length - 1]?.id
+  const rowBackground = (entry: TurnsEntry) => {
+    if (entry.kind === "turn" && entry.id === selected()) return theme.background.raised.high
+    if (entry.id === hovered()) return theme.background.raised.max
   }
-  const rowColor = (turn: Turn) =>
-    turn.id === selected() || turn.id === hovered() ? theme.text.base : theme.text.muted
+  const rowColor = (entry: TurnsEntry) => {
+    if (entry.kind === "turn" && entry.id === selected()) return theme.text.base
+    if (entry.id === hovered()) return theme.text.base
+    return theme.text.muted
+  }
   const detail = (turn: Turn) => {
     const parts = [`${turn.assistantMessages} ${turn.assistantMessages === 1 ? "reply" : "replies"}`]
     if (turn.toolCalls > 0) parts.push(`${turn.toolCalls} ${turn.toolCalls === 1 ? "tool" : "tools"}`)
@@ -337,7 +342,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
       </box>
 
       <Show
-        when={ordered().length > 0}
+        when={entries().length > 0}
         fallback={
           <box flexGrow={1} minHeight={0}>
             <text fg={theme.text.muted} wrapMode="word">
@@ -364,36 +369,36 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
             },
           }}
         >
-          <For each={ordered()}>
-            {(turn) => (
+          <For each={entries()}>
+            {(entry) => (
               <box
                 flexDirection="row"
                 gap={1}
                 paddingLeft={1}
                 paddingRight={1}
                 flexShrink={0}
-                backgroundColor={rowBackground(turn)}
-                onMouseOver={() => showTip(turn)}
-                onMouseOut={() => hideTip(turn.id)}
+                backgroundColor={rowBackground(entry)}
+                onMouseOver={() => showTip(entry)}
+                onMouseOut={() => hideTip(entry.id)}
                 onMouseDown={() => props.panel.focus()}
-                onMouseUp={(event) => open(turn, event.modifiers.ctrl ? "reply" : "prompt")}
+                onMouseUp={(event) => open(entry, event.modifiers.ctrl ? "reply" : "prompt")}
               >
-                <text fg={rowColor(turn)} wrapMode="none" flexShrink={0}>
-                  {String(turn.number).padStart(2, " ")}
+                <text fg={rowColor(entry)} wrapMode="none" flexShrink={0}>
+                  {entry.kind === "turn" ? String(entry.number).padStart(2, " ") : "⇣ "}
                 </text>
                 <text fg={theme.text.faint} wrapMode="none" flexShrink={0}>
-                  {formatClock(turn.createdAt)}
+                  {formatClock(entry.createdAt)}
                 </text>
-                <text fg={rowColor(turn)} wrapMode="none" truncate flexGrow={1} minWidth={0}>
-                  {turn.preview}
+                <text fg={rowColor(entry)} wrapMode="none" truncate flexGrow={1} minWidth={0}>
+                  {entry.preview}
                 </text>
                 <Show when={props.panel.width >= 46}>
                   <text fg={theme.text.faint} wrapMode="none" flexShrink={0}>
-                    {detail(turn)}
+                    {entry.kind === "turn" ? detail(entry) : entry.reason}
                   </text>
                 </Show>
-                <Show when={isRunningTurn(turn)}>
-                  <text fg={rowColor(turn)} wrapMode="none" flexShrink={0}>
+                <Show when={isRunningTurn(entry)}>
+                  <text fg={rowColor(entry)} wrapMode="none" flexShrink={0}>
                     {chase()}
                   </text>
                 </Show>
@@ -424,11 +429,14 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   const jump = createTimelineJump(props.context)
 
   const messages = createMemo(() => props.context.data.session.message.list(props.sessionID))
-  const turns = createMemo(() => collectTurns(messages()))
-  const hasTurns = createMemo(() => turns().length > 0)
+  const timeline = createMemo(() => collectTimeline(messages()))
+  const turns = createMemo(() => timeline().turns)
+  const entries = createMemo(() => timeline().entries)
+  const hasEntries = createMemo(() => entries().length > 0)
   const running = createMemo(() => props.context.data.session.status(props.sessionID) === "running")
   const chase = createChase(running)
-  const isRunningTurn = (turn: Turn) => running() && turn.id === turns()[turns().length - 1]?.id
+  const isRunningTurn = (entry: TurnsEntry) =>
+    entry.kind === "turn" && running() && entry.id === turns()[turns().length - 1]?.id
 
   // The sidebar scrollbox owns the remaining viewport height, so measure from
   // this section's top to the viewport bottom and let the list fill it.
@@ -465,13 +473,13 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
     }
     if (current !== scroll.content) return
     // Reserve one row for the fixed expand hint below the list.
-    const rows = scroll.viewport.height - top - 1 - (hasTurns() ? 1 : 0)
+    const rows = scroll.viewport.height - top - 1 - (hasEntries() ? 1 : 0)
     if (rows >= 1) setListRows(rows)
   }
   const scheduleMeasure = () => setTimeout(measure, 0)
 
   createEffect(() => {
-    hasTurns()
+    hasEntries()
     scheduleMeasure()
   })
 
@@ -484,14 +492,14 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
     observed = undefined
   })
 
-  const showTip = (turn: Turn) => {
-    setHovered(turn.id)
-    const index = turns().findIndex((item) => item.id === turn.id)
+  const showTip = (entry: TurnsEntry) => {
+    setHovered(entry.id)
+    const index = entries().findIndex((item) => item.id === entry.id)
     const row = index === -1 ? undefined : list?.getChildren()[index]
     if (!row || row.isDestroyed) return
     setTip({
-      id: turn.id,
-      text: turn.full,
+      id: entry.id,
+      text: entry.full,
       screenX: row.screenX,
       screenY: row.screenY,
       rowWidth: row.width,
@@ -511,7 +519,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
         <b>Turns ({turns().length})</b>
       </text>
       <Show
-        when={turns().length > 0}
+        when={entries().length > 0}
         fallback={
           <text fg={theme.text.muted} wrapMode="word">
             No user turns yet
@@ -520,7 +528,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
       >
         <scrollbox
           ref={(value: ScrollBoxRenderable) => (list = value)}
-          height={Math.min(turns().length, listRows())}
+          height={Math.min(entries().length, listRows())}
           flexShrink={0}
           stickyStart="bottom"
           horizontalScrollbarOptions={{ visible: false }}
@@ -536,35 +544,40 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
             },
           }}
         >
-          <For each={turns()}>
-            {(turn) => (
+          <For each={entries()}>
+            {(entry) => (
               <box
                 flexDirection="row"
                 gap={1}
                 paddingLeft={1}
                 paddingRight={1}
-                backgroundColor={hovered() === turn.id ? theme.background.raised.high : undefined}
-                onMouseOver={() => showTip(turn)}
-                onMouseOut={() => hideTip(turn.id)}
+                backgroundColor={hovered() === entry.id ? theme.background.raised.high : undefined}
+                onMouseOver={() => showTip(entry)}
+                onMouseOut={() => hideTip(entry.id)}
                 onMouseUp={(event) => {
+                  if (entry.kind !== "turn") return
                   setTip(undefined)
-                  jump(turn, event.modifiers.ctrl ? "reply" : "prompt")
+                  jump(entry, event.modifiers.ctrl ? "reply" : "prompt")
                 }}
               >
-                <text fg={hovered() === turn.id ? theme.text.base : theme.text.muted} wrapMode="none" flexShrink={0}>
-                  {turn.number}.
+                <text
+                  fg={hovered() === entry.id ? theme.text.base : theme.text.muted}
+                  wrapMode="none"
+                  flexShrink={0}
+                >
+                  {entry.kind === "turn" ? `${entry.number}.` : "⇣ "}
                 </text>
                 <text
-                  fg={hovered() === turn.id ? theme.text.base : theme.text.muted}
+                  fg={hovered() === entry.id ? theme.text.base : theme.text.muted}
                   wrapMode="none"
                   truncate
                   flexGrow={1}
                   minWidth={0}
                 >
-                  {turn.preview}
+                  {entry.preview}
                 </text>
-                <Show when={isRunningTurn(turn)}>
-                  <text fg={hovered() === turn.id ? theme.text.base : theme.text.muted} wrapMode="none" flexShrink={0}>
+                <Show when={isRunningTurn(entry)}>
+                  <text fg={hovered() === entry.id ? theme.text.base : theme.text.muted} wrapMode="none" flexShrink={0}>
                     {chase()}
                   </text>
                 </Show>
@@ -573,7 +586,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
           </For>
         </scrollbox>
       </Show>
-      <Show when={hasTurns()}>
+      <Show when={hasEntries()}>
         <text fg={theme.text.faint} wrapMode="none" truncate>
           <b>alt+t</b> expand turns
         </text>
