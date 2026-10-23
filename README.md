@@ -40,16 +40,16 @@ Both views show the turn number and prompt preview; compaction rows use a `⇣`
 marker instead. Hovering a turn shows the full prompt, and hovering a compaction
 shows its details, in a floating tooltip that preserves line breaks without
 changing the row height or scroll position. The tooltip is vertically centered on
-the hovered title, has a minimum height of 5 rows (including its border and top
-badge), and grows with its content up to the height of the left session pane;
-longer content scrolls with a vertical scrollbar. Its top-right
-corner shows `🔓︎ Unpinned` or `🔒︎ Pinned` (text-presentation lock glyphs,
-U+1F513/U+1F512 followed by U+FE0E). After 300ms over the same row the tooltip
-pins; moving the pointer into it pins it immediately, keeps the current content,
-and lets it scroll. Crossing other rows no longer switches immediately: a new row
-must be hovered for 220ms before its content replaces the tooltip. Once pinned,
-it stays open after the pointer leaves, until the user clicks outside it or
-dwells on another row. While the session is running,
+the hovered title, has a minimum height of 5 rows (including its border), and
+grows with its content up to the height of the left session pane; longer content
+scrolls with a vertical scrollbar. Its top border shows a faint `Unpinned` or
+`Pinned` label at the right, without a lock icon or an extra row. After 300ms
+over the same row the tooltip pins; moving the pointer into it pins it
+immediately, keeps the current content, and lets it scroll. Crossing other rows
+no longer switches immediately: a new row must be hovered for 220ms before its
+content replaces the tooltip. Once pinned, it stays open after the pointer
+leaves, until the user clicks outside it or dwells on another row. While the
+session is running,
 the newest turn carries a one-cell square at the end of its row: one edge lights
 every 280ms in clockwise order (`▀`, `▐`, `▄`, `▌`), so the border appears to
 flow gently around it. The square is only rendered while the run is active, so

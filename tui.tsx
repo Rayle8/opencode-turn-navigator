@@ -179,7 +179,7 @@ function TurnTooltip(props: {
   const [height, setHeight] = createSignal(0)
   const [contentHeight, setContentHeight] = createSignal(0)
   const minTooltipHeight = () => Math.min(TOOLTIP_MIN_ROWS, props.state.paneHeight)
-  const maxContentHeight = () => Math.max(1, props.state.paneHeight - 3)
+  const maxContentHeight = () => Math.max(1, props.state.paneHeight - 2)
   const needsScroll = () => contentHeight() > maxContentHeight()
   const measureContent = function (this: Renderable) {
     setContentHeight(this.height)
@@ -246,6 +246,9 @@ function TurnTooltip(props: {
         overflow="hidden"
         border
         borderColor={theme.border.base}
+        title={props.pinned ? "Pinned" : "Unpinned"}
+        titleAlignment="right"
+        titleColor={theme.text.faint}
         backgroundColor={theme.background.raised.max}
         onMouseOver={props.onEnter}
         onMouseOut={props.onLeave}
@@ -254,11 +257,6 @@ function TurnTooltip(props: {
           setHeight(this.height)
         }}
       >
-        <box flexDirection="row" justifyContent="flex-end" flexShrink={0} paddingRight={1}>
-          <text fg={theme.text.muted} wrapMode="none">
-            {props.pinned ? "\u{1F512}\uFE0E Pinned" : "\u{1F513}\uFE0E Unpinned"}
-          </text>
-        </box>
         <box flexDirection="column" flexGrow={1} minHeight={0} justifyContent="center">
           <Show
             when={needsScroll()}
