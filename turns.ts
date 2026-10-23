@@ -21,6 +21,8 @@ export type Turn = {
   readonly assistantMessages: number
   readonly replyStops: number
   readonly toolCalls: number
+  /** Assistant text replies joined by newlines; only used for search. */
+  readonly replyText?: string
   readonly tokenSteps?: number
   readonly tokenNew?: number
   readonly tokenCached?: number
@@ -178,6 +180,7 @@ export function collectTimeline(messages: readonly SessionMessageInfo[]): Timeli
         replyStops:
           current.replyStops + (message.content.some((part) => part.type === "text" && part.text.trim()) ? 1 : 0),
         toolCalls: current.toolCalls + message.content.filter((part) => part.type === "tool").length,
+        replyText: appendReplyText(current.replyText, message),
         ...(tokenSteps > 0
           ? {
               tokenSteps,
@@ -470,6 +473,26 @@ function compactionDetails(input: {
     lines.push(input.summary)
   }
   return lines.join("\n")
+}
+
+function appendReplyText(previous: string | undefined, message: Extract<SessionMessageInfo, { type: "assistant" }>) {
+  const texts = message.content.flatMap((part) => (part.type === "text" && part.text.trim() ? [part.text.trim()] : []))
+  if (texts.length === 0) return previous
+  return previous ? `${previous}\n${texts.join("\n")}` : texts.join("\n")
+}
+
+/**
+ * Case-insensitive match; every whitespace-separated term must appear in the
+ * prompt (or compaction details) or in the turn's assistant text replies.
+ */
+export function filterEntries(entries: readonly TurnsEntry[], query: string): TurnsEntry[] {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return [...entries]
+  return entries.filter((entry) => {
+    const text = entry.kind === "turn" && entry.replyText ? `${entry.full}\n${entry.replyText}` : entry.full
+    const haystack = text.toLowerCase()
+    return terms.every((term) => haystack.includes(term))
+  })
 }
 
 export function formatTokens(value: number) {
