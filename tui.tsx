@@ -169,7 +169,8 @@ type TooltipState = {
 function turnTokenHeader(turn: Turn, session: SessionUsage | undefined, context: Plugin.Context) {
   const lines: string[] = []
   if (session) {
-    const parts = [`Total ${formatTokens(session.total)}`, `Cached ${formatTokens(session.cached)}`]
+    const parts = [`Tot ${formatTokens(session.total)}`, `Cache ${formatTokens(session.cached)}`]
+    if (session.cost !== undefined) parts.push(`$${session.cost.toFixed(4)}`)
     const limit = modelContextLimit(context, session.model)
     if (limit) {
       const left = Math.max(0, Math.round((1 - session.context / limit) * 100))
@@ -185,15 +186,16 @@ function turnTokenHeader(turn: Turn, session: SessionUsage | undefined, context:
   ) {
     const steps = `${turn.tokenSteps} step${turn.tokenSteps === 1 ? "" : "s"}`
     const cachedPercent = turn.tokenTotal > 0 ? Math.round((turn.tokenCached / turn.tokenTotal) * 100) : 0
-    lines.push(
-      `Turn: Total ${formatTokens(turn.tokenTotal)} · New ${formatTokens(turn.tokenNew)} · ` +
-        `Cached ${formatTokens(turn.tokenCached)} (${cachedPercent}%) · ${steps}`,
-    )
-    const tail: string[] = []
-    if (turn.tokenCost !== undefined) tail.push(`$${turn.tokenCost.toFixed(4)}`)
-    if (turn.tokenTps !== undefined) tail.push(`${turn.tokenTps.toFixed(1)} t/s`)
-    if (turn.tokenBusts) tail.push(`${turn.tokenBusts} cache bust${turn.tokenBusts === 1 ? "" : "s"}`)
-    if (tail.length > 0) lines.push(tail.join(" · "))
+    const parts = [
+      `Tot ${formatTokens(turn.tokenTotal)}`,
+      `New ${formatTokens(turn.tokenNew)}`,
+      `Cache ${formatTokens(turn.tokenCached)} (${cachedPercent}%)`,
+      steps,
+    ]
+    if (turn.tokenCost !== undefined) parts.push(`$${turn.tokenCost.toFixed(4)}`)
+    if (turn.tokenTps !== undefined) parts.push(`${turn.tokenTps.toFixed(1)} t/s`)
+    lines.push(`Turn: ${parts.join(" · ")}`)
+    if (turn.tokenBusts) lines.push(`${turn.tokenBusts} cache bust${turn.tokenBusts === 1 ? "" : "s"}`)
   }
   return lines.length > 0 ? lines.join("\n") : undefined
 }
@@ -228,21 +230,29 @@ function TurnTooltip(props: {
   const [wrapper, setWrapper] = createSignal<BoxRenderable>()
   const [height, setHeight] = createSignal(0)
   const [contentHeight, setContentHeight] = createSignal(0)
+  const [summaryRows, setSummaryRows] = createSignal(0)
   const summaryLines = () => (props.state.summary ? props.state.summary.split("\n") : [])
   const minTooltipHeight = () => Math.min(TOOLTIP_MIN_ROWS, props.state.paneHeight)
-  const maxContentHeight = () => Math.max(1, props.state.paneHeight - 2 - summaryLines().length)
+  const maxContentHeight = () =>
+    Math.max(1, props.state.paneHeight - 2 - Math.max(summaryRows(), summaryLines().length))
   const needsScroll = () => contentHeight() > maxContentHeight()
   const measureContent = function (this: Renderable) {
     setContentHeight(this.height)
   }
+  const measureSummary = function (this: Renderable) {
+    setSummaryRows(this.height)
+  }
   let measuredID: string | undefined
   createEffect(() => {
     const id = props.state.id
-    if (measuredID !== undefined && measuredID !== id) setContentHeight(0)
+    if (measuredID !== undefined && measuredID !== id) {
+      setContentHeight(0)
+      setSummaryRows(0)
+    }
     measuredID = id
   })
   const width = () =>
-    Math.max(20, Math.min(60, Math.floor(props.state.terminalWidth / 2), props.state.terminalWidth - 6))
+    Math.max(20, Math.min(72, Math.floor(props.state.terminalWidth * 0.75), props.state.terminalWidth - 6))
   const left = () => {
     const state = props.state
     const gap = 2
@@ -309,12 +319,20 @@ function TurnTooltip(props: {
         }}
       >
         <Show when={summaryLines().length > 0}>
-          <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1}>
+          <box
+            flexDirection="column"
+            flexShrink={0}
+            paddingLeft={1}
+            paddingRight={1}
+            onSizeChange={measureSummary}
+          >
             <For each={summaryLines()}>
               {(line) => (
-                <text fg={theme.text.faint} wrapMode="none" truncate>
-                  {line}
-                </text>
+                <box width="100%">
+                  <text fg={theme.text.faint} wrapMode="word">
+                    {line}
+                  </text>
+                </box>
               )}
             </For>
           </box>

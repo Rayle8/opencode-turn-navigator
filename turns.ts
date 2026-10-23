@@ -264,6 +264,7 @@ export type SessionUsage = {
   readonly total: number
   readonly cached: number
   readonly context: number
+  readonly cost?: number
   readonly model: NonNullable<Turn["tokenModel"]>
 }
 
@@ -291,6 +292,8 @@ export function collectSessionUsage(
   let total = 0
   let cached = 0
   let context = 0
+  let cost = 0
+  let hasCost = false
   let model: SessionUsage["model"] | undefined
   for (let index = 0; index < end; index++) {
     const message = messages[index]!
@@ -300,6 +303,10 @@ export function collectSessionUsage(
     if (!tokens || step === undefined || step <= 0) continue
     total += step
     cached += tokens.cache.read
+    if (message.cost !== undefined) {
+      cost += message.cost
+      hasCost = true
+    }
     if (index >= start) {
       context = step
       model = {
@@ -310,7 +317,7 @@ export function collectSessionUsage(
     }
   }
   if (!model || context <= 0) return undefined
-  return { total, cached, context, model }
+  return { total, cached, context, cost: hasCost ? cost : undefined, model }
 }
 
 /**
