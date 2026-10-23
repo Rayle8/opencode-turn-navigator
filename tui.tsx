@@ -6,6 +6,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show }
 import {
   collectSessionUsage,
   collectTimeline,
+  filterEntries,
   formatClock,
   formatTokens,
   type Compaction,
@@ -252,7 +253,7 @@ function TurnTooltip(props: {
     measuredID = id
   })
   const width = () =>
-    Math.max(20, Math.min(72, Math.floor(props.state.terminalWidth * 0.75), props.state.terminalWidth - 6))
+    Math.max(20, Math.min(80, Math.floor(props.state.terminalWidth * 0.75), props.state.terminalWidth - 6))
   const left = () => {
     const state = props.state
     const gap = 2
@@ -454,20 +455,28 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   const entries = createMemo(() => timeline().entries)
   const running = createMemo(() => props.context.data.session.status(props.panel.sessionID) === "running")
   const chase = createChase(running)
-  const selectedEntry = createMemo(() => entries().find((entry) => entry.id === selected()))
+  const [searching, setSearching] = createSignal(false)
+  const [query, setQuery] = createSignal("")
+  const visible = createMemo(() => filterEntries(entries(), query()))
+  const selectedEntry = createMemo(() => visible().find((entry) => entry.id === selected()))
 
   createEffect(() => {
-    const list = entries()
+    const list = visible()
     if (list.length === 0) {
-      setSelected(undefined)
+      if (!query().trim()) setSelected(undefined)
       return
     }
     if (!list.some((entry) => entry.id === selected())) setSelected(list[list.length - 1]!.id)
   })
 
+  createEffect(() => {
+    query()
+    setTimeout(() => reveal(selected()), 0)
+  })
+
   const reveal = (id: string | undefined) => {
     if (!id || !scroll || scroll.isDestroyed) return
-    const index = entries().findIndex((entry) => entry.id === id)
+    const index = visible().findIndex((entry) => entry.id === id)
     const target = index === -1 ? undefined : scroll.getChildren()[index]
     if (!target) return
     const y = target.y - scroll.y
@@ -480,7 +489,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   })
 
   const move = (delta: number) => {
-    const list = entries()
+    const list = visible()
     if (list.length === 0) return
     const index = list.findIndex((entry) => entry.id === selected())
     const next = index === -1 ? 0 : (index + delta + list.length) % list.length
@@ -505,7 +514,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   }
 
   const applyTip = (entry: TurnsEntry) => {
-    const index = entries().findIndex((item) => item.id === entry.id)
+    const index = visible().findIndex((item) => item.id === entry.id)
     const row = index === -1 ? undefined : scroll?.getChildren()[index]
     if (!row || row.isDestroyed) {
       if (tip()?.id !== entry.id) dismissTip()
@@ -575,7 +584,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   createEffect(() => {
     const current = tip()
     if (!current) return
-    if (!entries().some((entry) => entry.id === current.id)) dismissTip()
+    if (!visible().some((entry) => entry.id === current.id)) dismissTip()
   })
   onCleanup(() => {
     clearPinTimer()
@@ -583,9 +592,21 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     clearLeaveTimer()
   })
 
+  const closeSearch = () => {
+    setSearching(false)
+    props.panel.focus()
+  }
+
   props.context.keymap.layer(() => ({
     priority: 20,
     commands: [
+      {
+        id: "turn-navigator.panel.search",
+        title: "Search turns",
+        group: "Turn navigator",
+        bind: "ctrl+f",
+        run: () => setSearching(true),
+      },
       {
         id: "turn-navigator.panel.next",
         title: "Next entry",
@@ -605,14 +626,14 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
         title: "First entry",
         group: "Turn navigator",
         bind: "home",
-        run: () => select(entries()[0]),
+        run: () => select(visible()[0]),
       },
       {
         id: "turn-navigator.panel.last",
         title: "Last entry",
         group: "Turn navigator",
         bind: "end",
-        run: () => select(entries()[entries().length - 1]),
+        run: () => select(visible()[visible().length - 1]),
       },
       {
         id: "turn-navigator.panel.open",
@@ -629,7 +650,14 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
         title: "Close turn navigator",
         group: "Turn navigator",
         bind: "escape",
-        run: () => props.panel.close(),
+        run: () => {
+          if (searching() || query()) {
+            setQuery("")
+            closeSearch()
+            return
+          }
+          props.panel.close()
+        },
       },
     ],
   }))
@@ -665,7 +693,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     >
       <box flexDirection="row" justifyContent="space-between" flexShrink={0} gap={1}>
         <text fg={theme.text.base} wrapMode="none">
-          <b>Turns ({turns().length})</b>
+          <b>{query().trim() ? `Turns (${visible().length}/${entries().length})` : `Turns (${turns().length})`}</b>
         </text>
         <Show when={running()}>
           <text fg={theme.text.feedback.success.base} wrapMode="none">
@@ -673,6 +701,33 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
           </text>
         </Show>
       </box>
+
+      <Show when={searching() || query()}>
+        <box flexDirection="row" gap={1} flexShrink={0} height={1}>
+          <text fg={theme.text.muted} wrapMode="none" flexShrink={0}>
+            Search
+          </text>
+          <input
+            focused={searching()}
+            value={query()}
+            placeholder="search prompts and replies, enter to confirm"
+            flexGrow={1}
+            minWidth={0}
+            textColor={theme.text.base}
+            cursorColor={theme.text.base}
+            backgroundColor={theme.background.raised.base}
+            focusedBackgroundColor={theme.background.raised.high}
+            onInput={(value: string) => setQuery(value)}
+            onSubmit={() => closeSearch()}
+          />
+        </box>
+      </Show>
+
+      <Show when={query().trim() && visible().length === 0}>
+        <text fg={theme.text.muted} wrapMode="word">
+          No matching turns
+        </text>
+      </Show>
 
       <Show
         when={entries().length > 0}
@@ -702,7 +757,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
             },
           }}
         >
-          <For each={entries()}>
+          <For each={visible()}>
             {(entry) => (
               <box
                 flexDirection="row"
@@ -746,7 +801,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
           click / enter jump · ctrl+click last reply
         </text>
         <text fg={theme.text.faint} wrapMode="none" truncate>
-          ↑↓ move · home end first/last · alt+t close
+          ↑↓ move · home end first/last · ctrl+f search · alt+t close
         </text>
       </box>
 
