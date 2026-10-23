@@ -1,7 +1,9 @@
 # Turn Navigator v1.0.2
 
+简体中文 | [English](release.en.md)
+
 发布日期：2026-10-23
-对比范围：[v1.0.1...v1.0.2](https://github.com/Rayle8/opencode-turn-navigator/compare/v1.0.1...v1.0.2)（16 个提交）
+对比范围：[v1.0.1...v1.0.2](https://github.com/Rayle8/opencode-turn-navigator/compare/v1.0.1...v1.0.2)
 
 本版本专注悬浮提示框（tooltip）的交互与信息密度：提示框按内容自适应、可滚动、可固定，并在头部给出会话与单轮的 token、费用和速度摘要。
 
