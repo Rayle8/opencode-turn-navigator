@@ -22,17 +22,17 @@ Alt+T       Open or close the expanded Turn navigator panel
 
 ## Install
 
-The plugin only needs `tui.tsx` and `turns.ts`. The command-line installation skips the README, screenshots, and other unrelated files, downloading only these two source files. OpenCode usually picks up the plugin without a restart; if it does not appear in the current session, switch sessions and check again.
+The plugin needs only `tui.tsx` and `turns.ts`. The commands below clone with `--sparse`, so a single paste installs it in a few seconds: only those two source files are fetched, while the directory stays a full git checkout that `git pull --ff-only` can update later. OpenCode usually picks the plugin up without a restart; if it does not show up in the current session, switch sessions and check again.
 
-### Install with an agent instruction
+### Option 1: ask an agent
 
 Send this prompt to an OpenCode agent with terminal access to install the plugin globally (available in every project):
 
 ```text
-Install OpenCode Turn Navigator from https://github.com/Rayle8/opencode-turn-navigator in my global OpenCode plugin directory (macOS / Linux: ~/.config/opencode/plugins/turn-navigator; Windows: %USERPROFILE%\.config\opencode\plugins\turn-navigator). Check out and install only tui.tsx and turns.ts. No restart should be needed; tell me how to confirm that the plugin loaded.
+Install OpenCode Turn Navigator from https://github.com/Rayle8/opencode-turn-navigator in my global OpenCode plugin directory (macOS / Linux: ~/.config/opencode/plugins/turn-navigator; Windows: %USERPROFILE%\.config\opencode\plugins\turn-navigator). Install it with `git clone --depth 1 --filter=blob:none --sparse` plus `git sparse-checkout set --no-cone /tui.tsx /turns.ts` so only tui.tsx and turns.ts are checked out, and keep the .git directory so it can be updated later. When done, confirm with `opencode plugin list` and tell me how to verify in the UI that the plugin loaded.
 ```
 
-### Install with commands
+### Option 2: run the commands
 
 #### Install globally (available in every project)
 
@@ -45,7 +45,7 @@ macOS / Linux:
 
 ```sh
 mkdir -p ~/.config/opencode/plugins
-git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git ~/.config/opencode/plugins/turn-navigator
+git clone --depth 1 --filter=blob:none --sparse --branch main https://github.com/Rayle8/opencode-turn-navigator.git ~/.config/opencode/plugins/turn-navigator
 git -C ~/.config/opencode/plugins/turn-navigator sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
 
@@ -54,9 +54,11 @@ Windows PowerShell:
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.config\opencode\plugins" | Out-Null
 $pluginDir = "$env:USERPROFILE\.config\opencode\plugins\turn-navigator"
-git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git $pluginDir
+git clone --depth 1 --filter=blob:none --sparse --branch main https://github.com/Rayle8/opencode-turn-navigator.git $pluginDir
 git -C $pluginDir sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
+
+> PowerShell 5.1 reports git's progress output (for example `Cloning into ...`) as red `NativeCommandError` text. That is not a failure: as long as `$LASTEXITCODE` is 0 and the directory contains both files, the install succeeded.
 
 #### Install for one project only
 
@@ -64,15 +66,24 @@ Run this from the project root:
 
 ```sh
 mkdir -p .opencode/plugins
-git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git .opencode/plugins/turn-navigator
+git clone --depth 1 --filter=blob:none --sparse --branch main https://github.com/Rayle8/opencode-turn-navigator.git .opencode/plugins/turn-navigator
 git -C .opencode/plugins/turn-navigator sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
 
-To update a global installation, run `git -C ~/.config/opencode/plugins/turn-navigator pull --ff-only`. For a project installation, replace the path with `.opencode/plugins/turn-navigator`.
+Update a global installation with `git -C ~/.config/opencode/plugins/turn-navigator pull --ff-only`; for a project installation, replace the path with `.opencode/plugins/turn-navigator`. To uninstall, delete that directory and reopen the TUI.
 
-OpenCode loads local plugins from the global plugin directory `~/.config/opencode/plugins/` (Windows: `%USERPROFILE%\.config\opencode\plugins\`) and the project directory `<project-root>/.opencode/plugins/`. No `opencode.json` change, dependency installation, or build step is required.
+OpenCode discovers local plugins in the global plugin directory `~/.config/opencode/plugins/` (Windows: `%USERPROFILE%\.config\opencode\plugins\`) and in `<project-root>/.opencode/plugins/`. No `opencode.json` change, dependency installation, or build step is required.
 
-After installation, open or switch to a session wide enough to show the sidebar and confirm that the `Turns` section appears. Click a turn to jump, or press `Alt+T` to open the full list. A restart is usually not needed.
+### Confirm the plugin loaded
+
+Check the plugin list first:
+
+```sh
+opencode plugin list
+# expect turn-navigator with SOURCE local
+```
+
+Then open or switch to a session wide enough to show the sidebar: a `Turns` section should appear, with an `alt+t expand turns` hint below the list. Press `Alt+T` to open the full list — `↑` / `↓` to move, `Enter` to jump, `Escape` to close. If it still does not appear, reopen the TUI; for troubleshooting, check `~/.local/share/opencode/log/opencode.log` (Windows: `%USERPROFILE%\.local\share\opencode\log\opencode.log`).
 
 ## Usage
 

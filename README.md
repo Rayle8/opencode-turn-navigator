@@ -4,6 +4,12 @@
 
 一个 OpenCode 终端界面（TUI）插件，用于浏览会话轮次、查看上下文压缩信息，并在对话记录中跳转。
 
+```text
+Alt+T       打开或关闭完整轮次面板
+/turns      在输入框执行同一操作
+<leader>b   用主机的绑定显示或隐藏侧栏
+```
+
 ## 效果演示
 
 ### 安装插件后
@@ -16,17 +22,17 @@
 
 ## 安装
 
-插件只需要 `tui.tsx` 和 `turns.ts`。程序命令安装会跳过 README、截图和其他无关文件，仅下载这两个源码文件。安装完成后通常无需重启 OpenCode；如果当前会话还没有显示插件，切换会话后再检查。
+插件只需要 `tui.tsx` 和 `turns.ts`。下面的命令用 `--sparse` 稀疏克隆，一次粘贴即可装好，通常几秒完成：只下载这两个源码文件，README、截图等不会取回；目录同时是完整的 git 仓库，之后可直接用 `git pull --ff-only` 更新。安装后通常无需重启 OpenCode；当前会话没有显示时，切换会话再看一次。
 
-### 通过指令安装
+### 方式一：让智能体安装
 
-把下面的提示词发给支持终端操作的 OpenCode 助手，可将插件安装到全局目录（所有项目可用）：
+把下面的提示词发给可操作终端的 OpenCode 智能体，插件会装到全局目录（所有项目可用）：
 
 ```text
-请从 https://github.com/Rayle8/opencode-turn-navigator 安装 OpenCode Turn Navigator，并放入当前用户的全局 OpenCode 插件目录（macOS / Linux：~/.config/opencode/plugins/turn-navigator；Windows：%USERPROFILE%\.config\opencode\plugins\turn-navigator）。只检出并安装 tui.tsx 和 turns.ts。安装后无需重启 OpenCode；请告诉我如何确认插件已加载。
+请从 https://github.com/Rayle8/opencode-turn-navigator 安装 OpenCode Turn Navigator，并放入当前用户的全局 OpenCode 插件目录（macOS / Linux：~/.config/opencode/plugins/turn-navigator；Windows：%USERPROFILE%\.config\opencode\plugins\turn-navigator）。用 `git clone --depth 1 --filter=blob:none --sparse` 加 `git sparse-checkout set --no-cone /tui.tsx /turns.ts` 安装，只检出 tui.tsx 和 turns.ts，并保留 .git 以便日后更新。装完用 `opencode plugin list` 确认，并告诉我如何在界面里确认插件已加载。
 ```
 
-### 通过程序命令安装
+### 方式二：手动执行命令
 
 #### 全局安装（所有项目可用）
 
@@ -39,7 +45,7 @@ macOS / Linux：
 
 ```sh
 mkdir -p ~/.config/opencode/plugins
-git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git ~/.config/opencode/plugins/turn-navigator
+git clone --depth 1 --filter=blob:none --sparse --branch main https://github.com/Rayle8/opencode-turn-navigator.git ~/.config/opencode/plugins/turn-navigator
 git -C ~/.config/opencode/plugins/turn-navigator sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
 
@@ -48,9 +54,11 @@ Windows PowerShell：
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.config\opencode\plugins" | Out-Null
 $pluginDir = "$env:USERPROFILE\.config\opencode\plugins\turn-navigator"
-git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git $pluginDir
+git clone --depth 1 --filter=blob:none --sparse --branch main https://github.com/Rayle8/opencode-turn-navigator.git $pluginDir
 git -C $pluginDir sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
+
+> PowerShell 5.1 会把 git 的进度输出（例如 `Cloning into ...`）当成错误显示成红字和 `NativeCommandError`。这不代表失败：只要 `$LASTEXITCODE` 为 0、目录里出现这两个文件，就说明装好了。
 
 #### 仅在当前项目安装
 
@@ -58,15 +66,24 @@ git -C $pluginDir sparse-checkout set --no-cone /tui.tsx /turns.ts
 
 ```sh
 mkdir -p .opencode/plugins
-git clone --depth 1 --filter=blob:none --no-checkout --branch main https://github.com/Rayle8/opencode-turn-navigator.git .opencode/plugins/turn-navigator
+git clone --depth 1 --filter=blob:none --sparse --branch main https://github.com/Rayle8/opencode-turn-navigator.git .opencode/plugins/turn-navigator
 git -C .opencode/plugins/turn-navigator sparse-checkout set --no-cone /tui.tsx /turns.ts
 ```
 
-更新全局安装时运行 `git -C ~/.config/opencode/plugins/turn-navigator pull --ff-only`；项目级安装时，将路径替换为 `.opencode/plugins/turn-navigator`。
+更新全局安装：`git -C ~/.config/opencode/plugins/turn-navigator pull --ff-only`；项目安装把路径换成 `.opencode/plugins/turn-navigator`。卸载只需删除该目录，然后重开 TUI。
 
-OpenCode 会从全局插件目录 `~/.config/opencode/plugins/`（Windows：`%USERPROFILE%\.config\opencode\plugins\`）和项目目录 `<项目根目录>/.opencode/plugins/` 加载本地插件。无需修改 `opencode.json`，也无需额外安装依赖或构建。
+OpenCode 会从全局插件目录 `~/.config/opencode/plugins/`（Windows：`%USERPROFILE%\.config\opencode\plugins\`）和项目目录 `<项目根目录>/.opencode/plugins/` 自动发现本地插件，无需修改 `opencode.json`，也无需安装依赖或构建。
 
-安装后打开或切换到一个可以显示侧栏的会话，确认出现 `Turns` 区块；点击轮次可跳转，按 `Alt+T` 打开完整列表。通常无需重启 OpenCode。
+### 确认插件已加载
+
+先看插件列表：
+
+```sh
+opencode plugin list
+# 期望输出包含 turn-navigator，SOURCE 为 local
+```
+
+再打开或切换到可显示侧栏的会话：侧栏应出现 `Turns` 区块，底部有 `alt+t expand turns` 提示；按 `Alt+T` 可打开完整列表，`↑` / `↓` 移动、`Enter` 跳转、`Escape` 关闭。仍未出现时重开一次 TUI；排查时查看 `~/.local/share/opencode/log/opencode.log`（Windows：`%USERPROFILE%\.local\share\opencode\log\opencode.log`）。
 
 ## 使用说明
 
