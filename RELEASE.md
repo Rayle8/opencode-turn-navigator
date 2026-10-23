@@ -1,6 +1,6 @@
 # Turn Navigator v1.0.2
 
-简体中文 | [English](release.en.md)
+简体中文 | [English](RELEASE.en.md)
 
 发布日期：2026-10-23
 对比范围：[v1.0.1...v1.0.2](https://github.com/Rayle8/opencode-turn-navigator/compare/v1.0.1...v1.0.2)
