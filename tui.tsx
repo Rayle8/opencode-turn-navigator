@@ -13,7 +13,7 @@ const PREVIOUS_MESSAGE_COMMAND = "session.message.previous"
 const NEXT_MESSAGE_COMMAND = "session.message.next"
 const JUMP_SETTLE_MS = 120
 const TOOLTIP_PIN_MS = 300
-const TOOLTIP_MIN_ROWS = 8
+const TOOLTIP_MIN_ROWS = 5
 const TOOLTIP_SWITCH_MS = 220
 const TOOLTIP_LEAVE_MS = 250
 
