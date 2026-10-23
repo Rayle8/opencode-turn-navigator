@@ -43,7 +43,10 @@ changing the row height or scroll position. The tooltip is vertically centered o
 the hovered title, has a minimum height of 5 rows (including its border), and
 grows with its content up to the height of the left session pane; longer content
 scrolls with a vertical scrollbar. Its top border shows a faint `Unpinned` or
-`Pinned` label at the right, without a lock icon or an extra row. After 300ms
+`Pinned` label at the right, without a lock icon or an extra row. For turns with
+usage data, the tooltip header summarizes steps, latest new/cached token counts,
+total tokens, context percentage, cost, TPS, and cache-bust count; the prompt
+follows below. After 300ms
 over the same row the tooltip pins; moving the pointer into it pins it
 immediately, keeps the current content, and lets it scroll. Crossing other rows
 no longer switches immediately: a new row must be hovered for 220ms before its

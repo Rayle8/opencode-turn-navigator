@@ -21,6 +21,14 @@ export type Turn = {
   readonly assistantMessages: number
   readonly replyStops: number
   readonly toolCalls: number
+  readonly tokenSteps?: number
+  readonly tokenNew?: number
+  readonly tokenCached?: number
+  readonly tokenTotal?: number
+  readonly tokenCost?: number
+  readonly tokenTps?: number
+  readonly tokenBusts?: number
+  readonly tokenModel?: { readonly providerID: string; readonly id: string; readonly variant?: string }
 }
 
 /**
@@ -66,6 +74,31 @@ export function collectTimeline(messages: readonly SessionMessageInfo[]): Timeli
   let promptIndex = 0
   let current: Turn | undefined
   let currentEntry = -1
+  let tokenSteps = 0
+  let tokenNew = 0
+  let tokenCached = 0
+  let tokenTotal = 0
+  let tokenCost = 0
+  let tokenHasCost = false
+  let tokenBusts = 0
+  let tpsOutput = 0
+  let tpsDuration = 0
+  let tokenModel: Turn["tokenModel"]
+  let previousToken: { read: number; model: NonNullable<Turn["tokenModel"]> } | undefined
+
+  const resetTokens = () => {
+    tokenSteps = 0
+    tokenNew = 0
+    tokenCached = 0
+    tokenTotal = 0
+    tokenCost = 0
+    tokenHasCost = false
+    tokenBusts = 0
+    tpsOutput = 0
+    tpsDuration = 0
+    tokenModel = undefined
+    previousToken = undefined
+  }
 
   for (const message of messages) {
     if (message.type === "user") {
@@ -76,6 +109,7 @@ export function collectTimeline(messages: readonly SessionMessageInfo[]): Timeli
         continue
       }
       const index = promptIndex++
+      resetTokens()
       current = {
         kind: "turn",
         id: message.id,
@@ -95,12 +129,67 @@ export function collectTimeline(messages: readonly SessionMessageInfo[]): Timeli
     }
     if (message.type === "assistant") {
       if (!current) continue
+      const tokens = message.tokens
+      if (tokens) {
+        const total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+        if (total > 0) {
+          const cached = tokens.cache.read
+          tokenSteps += 1
+          tokenNew = total - cached
+          tokenCached = cached
+          tokenTotal = total
+          tokenModel = {
+            providerID: message.model.providerID,
+            id: message.model.id,
+            variant: message.model.variant,
+          }
+          if (message.cost !== undefined) {
+            tokenCost += message.cost
+            tokenHasCost = true
+          }
+          if (message.time.streamed !== undefined) {
+            tpsOutput += tokens.output + tokens.reasoning
+            tpsDuration += Math.max(0, message.time.streamed - message.time.created)
+          }
+          if (
+            previousToken &&
+            previousToken.model.providerID === message.model.providerID &&
+            previousToken.model.id === message.model.id &&
+            previousToken.model.variant === message.model.variant
+          ) {
+            const drop = previousToken.read - cached
+            if (!(message.model.providerID === "openai" && drop >= 1_024 && drop <= 2_048) && drop > 0) {
+              tokenBusts += 1
+            }
+          }
+          previousToken = {
+            read: cached,
+            model: {
+              providerID: message.model.providerID,
+              id: message.model.id,
+              variant: message.model.variant,
+            },
+          }
+        }
+      }
       const updated: Turn = {
         ...current,
         assistantMessages: current.assistantMessages + 1,
         replyStops:
           current.replyStops + (message.content.some((part) => part.type === "text" && part.text.trim()) ? 1 : 0),
         toolCalls: current.toolCalls + message.content.filter((part) => part.type === "tool").length,
+        ...(tokenSteps > 0
+          ? {
+              tokenSteps,
+              tokenNew,
+              tokenCached,
+              tokenTotal,
+              tokenCost: tokenHasCost ? tokenCost : undefined,
+              tokenTps: tpsDuration > 0 ? tpsOutput / (tpsDuration / 1_000) : undefined,
+              tokenBusts: tokenBusts || undefined,
+              tokenModel,
+            }
+          : {}),
       }
       turns[turns.length - 1] = updated
       entries[currentEntry] = updated

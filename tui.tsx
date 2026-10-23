@@ -3,7 +3,7 @@ import type { PanelInput } from "@opencode/plugin/tui/context"
 import type { BoxRenderable, MouseEvent, Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { Portal } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { collectTimeline, formatClock, type Compaction, type Turn, type TurnsEntry } from "./turns"
+import { collectTimeline, formatClock, formatTokens, type Compaction, type Turn, type TurnsEntry } from "./turns"
 
 const PLUGIN_ID = "turn-navigator"
 const PANEL_NAME = "turn-navigator.turns"
@@ -154,6 +154,32 @@ type TooltipState = {
   readonly terminalHeight: number
   readonly paneTop: number
   readonly paneHeight: number
+  readonly summary?: string
+}
+
+function turnTokenHeader(turn: Turn, context: Plugin.Context) {
+  if (
+    turn.tokenSteps === undefined ||
+    turn.tokenNew === undefined ||
+    turn.tokenCached === undefined ||
+    turn.tokenTotal === undefined
+  ) {
+    return undefined
+  }
+  const steps = `${turn.tokenSteps} step${turn.tokenSteps === 1 ? "" : "s"}`
+  const first = `${steps} · ${formatTokens(turn.tokenNew)} new · ${formatTokens(turn.tokenCached)} cached`
+  const parts = [`Total ${formatTokens(turn.tokenTotal)}`]
+  const modelRef = turn.tokenModel
+  if (modelRef) {
+    const model = (context.data.location.model.list() ?? []).find(
+      (item) => item.providerID === modelRef.providerID && item.id === modelRef.id,
+    )
+    if (model?.limit.context) parts.push(`${Math.round((turn.tokenTotal / model.limit.context) * 100)}% ctx`)
+  }
+  if (turn.tokenCost !== undefined) parts.push(`$${turn.tokenCost.toFixed(4)}`)
+  if (turn.tokenTps !== undefined) parts.push(`${turn.tokenTps.toFixed(1)} t/s`)
+  if (turn.tokenBusts) parts.push(`${turn.tokenBusts} cache bust${turn.tokenBusts === 1 ? "" : "s"}`)
+  return `${first}\n${parts.join(" · ")}`
 }
 
 function sessionPaneBounds(context: Plugin.Context) {
@@ -178,8 +204,9 @@ function TurnTooltip(props: {
   const [wrapper, setWrapper] = createSignal<BoxRenderable>()
   const [height, setHeight] = createSignal(0)
   const [contentHeight, setContentHeight] = createSignal(0)
+  const summaryLines = () => (props.state.summary ? props.state.summary.split("\n") : [])
   const minTooltipHeight = () => Math.min(TOOLTIP_MIN_ROWS, props.state.paneHeight)
-  const maxContentHeight = () => Math.max(1, props.state.paneHeight - 2)
+  const maxContentHeight = () => Math.max(1, props.state.paneHeight - 2 - summaryLines().length)
   const needsScroll = () => contentHeight() > maxContentHeight()
   const measureContent = function (this: Renderable) {
     setContentHeight(this.height)
@@ -257,6 +284,17 @@ function TurnTooltip(props: {
           setHeight(this.height)
         }}
       >
+        <Show when={summaryLines().length > 0}>
+          <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1}>
+            <For each={summaryLines()}>
+              {(line) => (
+                <text fg={theme.text.faint} wrapMode="none" truncate>
+                  {line}
+                </text>
+              )}
+            </For>
+          </box>
+        </Show>
         <box flexDirection="column" flexGrow={1} minHeight={0} justifyContent="center">
           <Show
             when={needsScroll()}
@@ -435,6 +473,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     setTip({
       id: entry.id,
       text: entry.full,
+      summary: entry.kind === "turn" ? turnTokenHeader(entry, props.context) : undefined,
       screenX: row.screenX,
       screenY: row.screenY,
       rowWidth: row.width,
@@ -807,6 +846,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
     setTip({
       id: entry.id,
       text: entry.full,
+      summary: entry.kind === "turn" ? turnTokenHeader(entry, props.context) : undefined,
       screenX: row.screenX,
       screenY: row.screenY,
       rowWidth: row.width,
