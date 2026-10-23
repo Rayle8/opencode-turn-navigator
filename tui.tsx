@@ -172,7 +172,7 @@ function turnTokenHeader(turn: Turn, session: SessionUsage | undefined, context:
     const parts = [`Total ${formatTokens(session.total)}`, `Cached ${formatTokens(session.cached)}`]
     const limit = modelContextLimit(context, session.model)
     if (limit) {
-      const left = Math.max(0, Math.round((1 - session.total / limit) * 100))
+      const left = Math.max(0, Math.round((1 - session.context / limit) * 100))
       parts.push(`${left}% context left`)
     }
     lines.push(`Session: ${parts.join(" · ")}`)
@@ -434,7 +434,6 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   const timeline = createMemo(() => collectTimeline(messages()))
   const turns = createMemo(() => timeline().turns)
   const entries = createMemo(() => timeline().entries)
-  const sessionUsage = createMemo(() => collectSessionUsage(messages()))
   const running = createMemo(() => props.context.data.session.status(props.panel.sessionID) === "running")
   const chase = createChase(running)
   const selectedEntry = createMemo(() => entries().find((entry) => entry.id === selected()))
@@ -498,7 +497,10 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     setTip({
       id: entry.id,
       text: entry.full,
-      summary: entry.kind === "turn" ? turnTokenHeader(entry, sessionUsage(), props.context) : undefined,
+      summary:
+        entry.kind === "turn"
+          ? turnTokenHeader(entry, collectSessionUsage(messages(), entry.id), props.context)
+          : undefined,
       screenX: row.screenX,
       screenY: row.screenY,
       rowWidth: row.width,
@@ -800,7 +802,6 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   const timeline = createMemo(() => collectTimeline(messages()))
   const turns = createMemo(() => timeline().turns)
   const entries = createMemo(() => timeline().entries)
-  const sessionUsage = createMemo(() => collectSessionUsage(messages()))
   const hasEntries = createMemo(() => entries().length > 0)
   const running = createMemo(() => props.context.data.session.status(props.sessionID) === "running")
   const chase = createChase(running)
@@ -872,7 +873,10 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
     setTip({
       id: entry.id,
       text: entry.full,
-      summary: entry.kind === "turn" ? turnTokenHeader(entry, sessionUsage(), props.context) : undefined,
+      summary:
+        entry.kind === "turn"
+          ? turnTokenHeader(entry, collectSessionUsage(messages(), entry.id), props.context)
+          : undefined,
       screenX: row.screenX,
       screenY: row.screenY,
       rowWidth: row.width,

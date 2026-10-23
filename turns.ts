@@ -259,37 +259,58 @@ function contextTokens(message: Extract<SessionMessageInfo, { type: "assistant" 
   return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
 }
 
-/** The session's current context snapshot: the size of the last assistant step. */
+/** Session usage up to the hovered turn, plus the context size that turn ended at. */
 export type SessionUsage = {
   readonly total: number
   readonly cached: number
+  readonly context: number
   readonly model: NonNullable<Turn["tokenModel"]>
 }
 
 /**
- * Snapshot the latest assistant step instead of summing every step: each step
- * resends the same prefix, so a sum counts it once per request and would pass
- * the context limit within a few turns. The last step is the context the next
- * request has to fit into.
+ * Sums every assistant step from the session start through the given turn:
+ * `total` and `cached` are cumulative spend, while `context` is the size of the
+ * turn's last step, which is what the next request has to fit into. The latest
+ * step alone would double as the turn numbers, and summing past the turn would
+ * describe a state the user is not hovering.
  */
-export function collectSessionUsage(messages: readonly SessionMessageInfo[]): SessionUsage | undefined {
-  for (let index = messages.length - 1; index >= 0; index--) {
+export function collectSessionUsage(
+  messages: readonly SessionMessageInfo[],
+  turnID: string,
+): SessionUsage | undefined {
+  const start = messages.findIndex((message) => message.type === "user" && message.id === turnID)
+  if (start === -1) return undefined
+  let end = messages.length
+  for (let index = start + 1; index < messages.length; index++) {
+    const message = messages[index]!
+    if (message.type === "user" && message.text.trim()) {
+      end = index
+      break
+    }
+  }
+  let total = 0
+  let cached = 0
+  let context = 0
+  let model: SessionUsage["model"] | undefined
+  for (let index = 0; index < end; index++) {
     const message = messages[index]!
     if (message.type !== "assistant") continue
     const tokens = message.tokens
-    const total = contextTokens(message)
-    if (!tokens || total === undefined || total <= 0) continue
-    return {
-      total,
-      cached: tokens.cache.read,
-      model: {
+    const step = contextTokens(message)
+    if (!tokens || step === undefined || step <= 0) continue
+    total += step
+    cached += tokens.cache.read
+    if (index >= start) {
+      context = step
+      model = {
         providerID: message.model.providerID,
         id: message.model.id,
         variant: message.model.variant,
-      },
+      }
     }
   }
-  return undefined
+  if (!model || context <= 0) return undefined
+  return { total, cached, context, model }
 }
 
 /**
