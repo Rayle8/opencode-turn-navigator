@@ -3,7 +3,16 @@ import type { PanelInput } from "@opencode/plugin/tui/context"
 import type { BoxRenderable, MouseEvent, Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { Portal } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { collectTimeline, formatClock, formatTokens, type Compaction, type Turn, type TurnsEntry } from "./turns"
+import {
+  collectSessionUsage,
+  collectTimeline,
+  formatClock,
+  formatTokens,
+  type Compaction,
+  type SessionUsage,
+  type Turn,
+  type TurnsEntry,
+} from "./turns"
 
 const PLUGIN_ID = "turn-navigator"
 const PANEL_NAME = "turn-navigator.turns"
@@ -157,29 +166,44 @@ type TooltipState = {
   readonly summary?: string
 }
 
-function turnTokenHeader(turn: Turn, context: Plugin.Context) {
+function turnTokenHeader(turn: Turn, session: SessionUsage | undefined, context: Plugin.Context) {
+  const lines: string[] = []
+  if (session) {
+    const parts = [`Total ${formatTokens(session.total)}`, `Cached ${formatTokens(session.cached)}`]
+    const limit = modelContextLimit(context, session.model)
+    if (limit) {
+      const left = Math.max(0, Math.round((1 - session.total / limit) * 100))
+      parts.push(`${left}% context left`)
+    }
+    lines.push(`Session: ${parts.join(" · ")}`)
+  }
   if (
-    turn.tokenSteps === undefined ||
-    turn.tokenNew === undefined ||
-    turn.tokenCached === undefined ||
-    turn.tokenTotal === undefined
+    turn.tokenSteps !== undefined &&
+    turn.tokenNew !== undefined &&
+    turn.tokenCached !== undefined &&
+    turn.tokenTotal !== undefined
   ) {
-    return undefined
-  }
-  const steps = `${turn.tokenSteps} step${turn.tokenSteps === 1 ? "" : "s"}`
-  const first = `${steps} · ${formatTokens(turn.tokenNew)} new · ${formatTokens(turn.tokenCached)} cached`
-  const parts = [`Total ${formatTokens(turn.tokenTotal)}`]
-  const modelRef = turn.tokenModel
-  if (modelRef) {
-    const model = (context.data.location.model.list() ?? []).find(
-      (item) => item.providerID === modelRef.providerID && item.id === modelRef.id,
+    const steps = `${turn.tokenSteps} step${turn.tokenSteps === 1 ? "" : "s"}`
+    const cachedPercent = turn.tokenTotal > 0 ? Math.round((turn.tokenCached / turn.tokenTotal) * 100) : 0
+    lines.push(
+      `Turn: Total ${formatTokens(turn.tokenTotal)} · New ${formatTokens(turn.tokenNew)} · ` +
+        `Cached ${formatTokens(turn.tokenCached)} (${cachedPercent}%) · ${steps}`,
     )
-    if (model?.limit.context) parts.push(`${Math.round((turn.tokenTotal / model.limit.context) * 100)}% ctx`)
+    const tail: string[] = []
+    if (turn.tokenCost !== undefined) tail.push(`$${turn.tokenCost.toFixed(4)}`)
+    if (turn.tokenTps !== undefined) tail.push(`${turn.tokenTps.toFixed(1)} t/s`)
+    if (turn.tokenBusts) tail.push(`${turn.tokenBusts} cache bust${turn.tokenBusts === 1 ? "" : "s"}`)
+    if (tail.length > 0) lines.push(tail.join(" · "))
   }
-  if (turn.tokenCost !== undefined) parts.push(`$${turn.tokenCost.toFixed(4)}`)
-  if (turn.tokenTps !== undefined) parts.push(`${turn.tokenTps.toFixed(1)} t/s`)
-  if (turn.tokenBusts) parts.push(`${turn.tokenBusts} cache bust${turn.tokenBusts === 1 ? "" : "s"}`)
-  return `${first}\n${parts.join(" · ")}`
+  return lines.length > 0 ? lines.join("\n") : undefined
+}
+
+function modelContextLimit(context: Plugin.Context, modelRef: Turn["tokenModel"] | undefined) {
+  if (!modelRef) return undefined
+  const model = (context.data.location.model.list() ?? []).find(
+    (item) => item.providerID === modelRef.providerID && item.id === modelRef.id,
+  )
+  return model?.limit.context
 }
 
 function sessionPaneBounds(context: Plugin.Context) {
@@ -410,6 +434,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   const timeline = createMemo(() => collectTimeline(messages()))
   const turns = createMemo(() => timeline().turns)
   const entries = createMemo(() => timeline().entries)
+  const sessionUsage = createMemo(() => collectSessionUsage(messages()))
   const running = createMemo(() => props.context.data.session.status(props.panel.sessionID) === "running")
   const chase = createChase(running)
   const selectedEntry = createMemo(() => entries().find((entry) => entry.id === selected()))
@@ -473,7 +498,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     setTip({
       id: entry.id,
       text: entry.full,
-      summary: entry.kind === "turn" ? turnTokenHeader(entry, props.context) : undefined,
+      summary: entry.kind === "turn" ? turnTokenHeader(entry, sessionUsage(), props.context) : undefined,
       screenX: row.screenX,
       screenY: row.screenY,
       rowWidth: row.width,
@@ -775,6 +800,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   const timeline = createMemo(() => collectTimeline(messages()))
   const turns = createMemo(() => timeline().turns)
   const entries = createMemo(() => timeline().entries)
+  const sessionUsage = createMemo(() => collectSessionUsage(messages()))
   const hasEntries = createMemo(() => entries().length > 0)
   const running = createMemo(() => props.context.data.session.status(props.sessionID) === "running")
   const chase = createChase(running)
@@ -846,7 +872,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
     setTip({
       id: entry.id,
       text: entry.full,
-      summary: entry.kind === "turn" ? turnTokenHeader(entry, props.context) : undefined,
+      summary: entry.kind === "turn" ? turnTokenHeader(entry, sessionUsage(), props.context) : undefined,
       screenX: row.screenX,
       screenY: row.screenY,
       rowWidth: row.width,

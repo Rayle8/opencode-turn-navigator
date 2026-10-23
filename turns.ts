@@ -259,6 +259,39 @@ function contextTokens(message: Extract<SessionMessageInfo, { type: "assistant" 
   return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
 }
 
+/** The session's current context snapshot: the size of the last assistant step. */
+export type SessionUsage = {
+  readonly total: number
+  readonly cached: number
+  readonly model: NonNullable<Turn["tokenModel"]>
+}
+
+/**
+ * Snapshot the latest assistant step instead of summing every step: each step
+ * resends the same prefix, so a sum counts it once per request and would pass
+ * the context limit within a few turns. The last step is the context the next
+ * request has to fit into.
+ */
+export function collectSessionUsage(messages: readonly SessionMessageInfo[]): SessionUsage | undefined {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]!
+    if (message.type !== "assistant") continue
+    const tokens = message.tokens
+    const total = contextTokens(message)
+    if (!tokens || total === undefined || total <= 0) continue
+    return {
+      total,
+      cached: tokens.cache.read,
+      model: {
+        providerID: message.model.providerID,
+        id: message.model.id,
+        variant: message.model.variant,
+      },
+    }
+  }
+  return undefined
+}
+
 /**
  * Compaction rows have no host navigation boundary of their own, so jump to the
  * nearest user/assistant boundary around them. The count is relative to the last
