@@ -14,6 +14,8 @@ const NEXT_MESSAGE_COMMAND = "session.message.next"
 const JUMP_SETTLE_MS = 120
 const TOOLTIP_PIN_MS = 300
 const TOOLTIP_MIN_ROWS = 8
+const TOOLTIP_SWITCH_MS = 220
+const TOOLTIP_LEAVE_MS = 250
 
 // A single cell; each frame lights one edge in clockwise order so the border
 // appears to flow around it.
@@ -168,6 +170,8 @@ function TurnTooltip(props: {
   context: Plugin.Context
   state: TooltipState
   pinned: boolean
+  onEnter: () => void
+  onLeave: () => void
   onDismiss: () => void
 }) {
   const theme = props.context.theme
@@ -243,6 +247,8 @@ function TurnTooltip(props: {
         border
         borderColor={theme.border.base}
         backgroundColor={theme.background.raised.max}
+        onMouseOver={props.onEnter}
+        onMouseOut={props.onLeave}
         onMouseDown={(event) => event.stopPropagation()}
         onSizeChange={function (this: BoxRenderable) {
           setHeight(this.height)
@@ -303,15 +309,42 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
   const [tip, setTip] = createSignal<TooltipState>()
   const [pinned, setPinned] = createSignal(false)
   let pinTimer: ReturnType<typeof setTimeout> | undefined
+  let switchTimer: ReturnType<typeof setTimeout> | undefined
+  let leaveTimer: ReturnType<typeof setTimeout> | undefined
+  let pending: TurnsEntry | undefined
+  let held = false
   const clearPinTimer = () => {
     if (pinTimer) clearTimeout(pinTimer)
     pinTimer = undefined
   }
+  const clearSwitchTimer = () => {
+    if (switchTimer) clearTimeout(switchTimer)
+    switchTimer = undefined
+  }
+  const clearLeaveTimer = () => {
+    if (leaveTimer) clearTimeout(leaveTimer)
+    leaveTimer = undefined
+  }
   const dismissTip = () => {
     clearPinTimer()
+    clearSwitchTimer()
+    clearLeaveTimer()
+    pending = undefined
+    held = false
     setPinned(false)
     setHovered(undefined)
     setTip(undefined)
+  }
+  const holdTip = () => {
+    held = true
+    pending = undefined
+    clearSwitchTimer()
+    clearLeaveTimer()
+    clearPinTimer()
+    setPinned(true)
+  }
+  const releaseTip = () => {
+    held = false
   }
   const armPin = (entry: TurnsEntry) => {
     setPinned(false)
@@ -393,13 +426,11 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     jump(entry, target)
   }
 
-  const showTip = (entry: TurnsEntry) => {
-    const same = tip()?.id === entry.id
-    setHovered(entry.id)
+  const applyTip = (entry: TurnsEntry) => {
     const index = entries().findIndex((item) => item.id === entry.id)
     const row = index === -1 ? undefined : scroll?.getChildren()[index]
     if (!row || row.isDestroyed) {
-      if (!same) dismissTip()
+      if (tip()?.id !== entry.id) dismissTip()
       return
     }
     const pane = sessionPaneBounds(props.context)
@@ -414,16 +445,49 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
       paneTop: pane.top,
       paneHeight: pane.height,
     })
-    if (same && (pinned() || pinTimer)) return
     armPin(entry)
+  }
+
+  const showTip = (entry: TurnsEntry) => {
+    if (held) return
+    setHovered(entry.id)
+    clearLeaveTimer()
+    if (tip()?.id === entry.id) {
+      clearSwitchTimer()
+      pending = undefined
+      return
+    }
+    if (!tip()) {
+      applyTip(entry)
+      return
+    }
+    pending = entry
+    clearSwitchTimer()
+    switchTimer = setTimeout(() => {
+      switchTimer = undefined
+      const target = pending
+      pending = undefined
+      if (!target || held || hovered() !== target.id) return
+      applyTip(target)
+    }, TOOLTIP_SWITCH_MS)
   }
 
   const hideTip = (id: string) => {
     if (hovered() === id) setHovered(undefined)
-    if (tip()?.id !== id) return
-    clearPinTimer()
-    if (pinned()) return
-    setTip(undefined)
+    if (pending?.id === id) {
+      clearSwitchTimer()
+      pending = undefined
+    }
+    if (held || pinned()) return
+    if (!tip() || hovered() || pending) return
+    clearLeaveTimer()
+    leaveTimer = setTimeout(() => {
+      leaveTimer = undefined
+      if (held || pinned() || hovered() || pending) return
+      clearPinTimer()
+      setPinned(false)
+      setTip(undefined)
+    }, TOOLTIP_LEAVE_MS)
   }
 
   createEffect(() => {
@@ -431,7 +495,11 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
     if (!current) return
     if (!entries().some((entry) => entry.id === current.id)) dismissTip()
   })
-  onCleanup(clearPinTimer)
+  onCleanup(() => {
+    clearPinTimer()
+    clearSwitchTimer()
+    clearLeaveTimer()
+  })
 
   props.context.keymap.layer(() => ({
     priority: 20,
@@ -600,7 +668,7 @@ function TurnsPanel(props: { context: Plugin.Context; panel: PanelInput }) {
         </text>
       </box>
 
-      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} pinned={pinned()} onDismiss={dismissTip} />}</Show>
+      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} pinned={pinned()} onEnter={holdTip} onLeave={releaseTip} onDismiss={dismissTip} />}</Show>
     </box>
   )
 }
@@ -612,15 +680,42 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
   const [tip, setTip] = createSignal<TooltipState>()
   const [pinned, setPinned] = createSignal(false)
   let pinTimer: ReturnType<typeof setTimeout> | undefined
+  let switchTimer: ReturnType<typeof setTimeout> | undefined
+  let leaveTimer: ReturnType<typeof setTimeout> | undefined
+  let pending: TurnsEntry | undefined
+  let held = false
   const clearPinTimer = () => {
     if (pinTimer) clearTimeout(pinTimer)
     pinTimer = undefined
   }
+  const clearSwitchTimer = () => {
+    if (switchTimer) clearTimeout(switchTimer)
+    switchTimer = undefined
+  }
+  const clearLeaveTimer = () => {
+    if (leaveTimer) clearTimeout(leaveTimer)
+    leaveTimer = undefined
+  }
   const dismissTip = () => {
     clearPinTimer()
+    clearSwitchTimer()
+    clearLeaveTimer()
+    pending = undefined
+    held = false
     setPinned(false)
     setHovered(undefined)
     setTip(undefined)
+  }
+  const holdTip = () => {
+    held = true
+    pending = undefined
+    clearSwitchTimer()
+    clearLeaveTimer()
+    clearPinTimer()
+    setPinned(true)
+  }
+  const releaseTip = () => {
+    held = false
   }
   const toggle = () => {
     dismissTip()
@@ -703,13 +798,11 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
     observed = undefined
   })
 
-  const showTip = (entry: TurnsEntry) => {
-    const same = tip()?.id === entry.id
-    setHovered(entry.id)
+  const applyTip = (entry: TurnsEntry) => {
     const index = entries().findIndex((item) => item.id === entry.id)
     const row = index === -1 ? undefined : list?.getChildren()[index]
     if (!row || row.isDestroyed) {
-      if (!same) dismissTip()
+      if (tip()?.id !== entry.id) dismissTip()
       return
     }
     const pane = sessionPaneBounds(props.context)
@@ -724,16 +817,49 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
       paneTop: pane.top,
       paneHeight: pane.height,
     })
-    if (same && (pinned() || pinTimer)) return
     armPin(entry)
+  }
+
+  const showTip = (entry: TurnsEntry) => {
+    if (held) return
+    setHovered(entry.id)
+    clearLeaveTimer()
+    if (tip()?.id === entry.id) {
+      clearSwitchTimer()
+      pending = undefined
+      return
+    }
+    if (!tip()) {
+      applyTip(entry)
+      return
+    }
+    pending = entry
+    clearSwitchTimer()
+    switchTimer = setTimeout(() => {
+      switchTimer = undefined
+      const target = pending
+      pending = undefined
+      if (!target || held || hovered() !== target.id) return
+      applyTip(target)
+    }, TOOLTIP_SWITCH_MS)
   }
 
   const hideTip = (id: string) => {
     if (hovered() === id) setHovered(undefined)
-    if (tip()?.id !== id) return
-    clearPinTimer()
-    if (pinned()) return
-    setTip(undefined)
+    if (pending?.id === id) {
+      clearSwitchTimer()
+      pending = undefined
+    }
+    if (held || pinned()) return
+    if (!tip() || hovered() || pending) return
+    clearLeaveTimer()
+    leaveTimer = setTimeout(() => {
+      leaveTimer = undefined
+      if (held || pinned() || hovered() || pending) return
+      clearPinTimer()
+      setPinned(false)
+      setTip(undefined)
+    }, TOOLTIP_LEAVE_MS)
   }
 
   createEffect(() => {
@@ -741,7 +867,11 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
     if (!current) return
     if (!entries().some((entry) => entry.id === current.id)) dismissTip()
   })
-  onCleanup(clearPinTimer)
+  onCleanup(() => {
+    clearPinTimer()
+    clearSwitchTimer()
+    clearLeaveTimer()
+  })
 
   return (
     <box ref={(value: BoxRenderable) => (root = value)}>
@@ -834,7 +964,7 @@ function SidebarTurns(props: { context: Plugin.Context; sessionID: string }) {
           <b>alt+t</b> expand turns
         </text>
       </Show>
-      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} pinned={pinned()} onDismiss={dismissTip} />}</Show>
+      <Show when={tip()}>{(state) => <TurnTooltip context={props.context} state={state()} pinned={pinned()} onEnter={holdTip} onLeave={releaseTip} onDismiss={dismissTip} />}</Show>
       </Show>
     </box>
   )
